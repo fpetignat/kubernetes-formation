@@ -43,6 +43,10 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 
   Sécurisation des clusters, contrôle d'accès et bonnes pratiques
 
+- **[TP6 - Mise en Production et CI/CD](tp6/README.md)**
+
+  Déploiement automatisé, GitOps, Helm et stratégies de mise en production
+
 ### Documentation complémentaire
 
 - [Installation rapide](#installation-rapide)
@@ -139,6 +143,25 @@ Maîtrisez la sécurité et le contrôle d'accès dans Kubernetes. Ce TP couvre 
 **Durée estimée :** 6-7 heures
 **Niveau :** Avancé
 
+### TP6 - Mise en Production et CI/CD
+
+📁 **[Accéder au TP6](tp6/README.md)**
+
+Maîtrisez le déploiement en production et l'automatisation avec Kubernetes. Ce TP couvre :
+- Helm : Charts, releases et gestionnaire de packages
+- Ingress Controllers : NGINX Ingress, routing HTTP/HTTPS
+- CI/CD : Pipelines avec GitHub Actions
+- Stratégies de déploiement : Rolling, Blue-Green, Canary
+- GitOps : Déploiement continu avec ArgoCD
+- Gestion d'environnements multiples (dev, staging, prod)
+- HPA, PDB et haute disponibilité
+- Sealed Secrets et gestion sécurisée de la configuration
+- Kustomize pour la configuration multi-environnements
+- Monitoring, alertes et bonnes pratiques de production
+
+**Durée estimée :** 8-10 heures
+**Niveau :** Avancé
+
 ---
 
 ## Installation rapide
@@ -174,6 +197,8 @@ kubernetes-formation/
 │   └── README.md             # Guide complet du TP4
 ├── tp5/                       # TP5 - Sécurité et RBAC
 │   └── README.md             # Guide complet du TP5
+├── tp6/                       # TP6 - Mise en Production et CI/CD
+│   └── README.md             # Guide complet du TP6
 ├── .claude/                   # Configuration et instructions
 │   ├── INSTRUCTIONS.md        # Instructions pour Claude
 │   ├── QUICKSTART.md          # Guide de démarrage rapide
@@ -293,7 +318,7 @@ kubectl get events
 3. **TP3** : Persistance des données ✅
 4. **TP4** : Monitoring et logs ✅
 5. **TP5** : Sécurité et RBAC ✅
-6. **TP6** (à venir) : Mise en production et CI/CD
+6. **TP6** : Mise en production et CI/CD ✅
 
 ## Workflow avec Claude
 
