@@ -35,6 +35,10 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 
   Gestion des volumes et du stockage persistant
 
+- **[TP4 - Monitoring et Gestion des Logs](tp4/README.md)**
+
+  Observabilité, métriques, logs et alertes dans Kubernetes
+
 ### Documentation complémentaire
 
 - [Installation rapide](#installation-rapide)
@@ -94,6 +98,25 @@ Apprenez à gérer le stockage persistant et les volumes dans Kubernetes. Ce TP 
 **Durée estimée :** 4-5 heures
 **Niveau :** Intermédiaire
 
+### TP4 - Monitoring et Gestion des Logs
+
+📁 **[Accéder au TP4](tp4/README.md)**
+
+Maîtrisez l'observabilité et le monitoring de vos clusters Kubernetes. Ce TP couvre :
+- Les trois piliers de l'observabilité (métriques, logs, traces)
+- Installation et utilisation de Metrics Server
+- Horizontal Pod Autoscaler (HPA)
+- Dashboard Kubernetes
+- Collecte et analyse des logs avec kubectl
+- Déploiement de Prometheus pour le monitoring
+- Création de dashboards avec Grafana
+- Configuration d'alertes
+- Introduction aux stacks EFK/ELK
+- Bonnes pratiques de monitoring et logging
+
+**Durée estimée :** 5-6 heures
+**Niveau :** Intermédiaire/Avancé
+
 ---
 
 ## Installation rapide
@@ -125,6 +148,8 @@ kubernetes-formation/
 │   └── README.md             # Guide complet du TP2
 ├── tp3/                       # TP3 - Persistance des données
 │   └── README.md             # Guide complet du TP3
+├── tp4/                       # TP4 - Monitoring et Logs
+│   └── README.md             # Guide complet du TP4
 ├── .claude/                   # Configuration et instructions
 │   ├── INSTRUCTIONS.md        # Instructions pour Claude
 │   ├── QUICKSTART.md          # Guide de démarrage rapide
@@ -241,8 +266,9 @@ kubectl get events
 1. **TP1** : Bases de Kubernetes et premier déploiement ✅
 2. **TP2** : Maîtrise des manifests YAML ✅
 3. **TP3** : Persistance des données ✅
-4. **TP4** (à venir) : Monitoring et logs
-5. **TP5** (à venir) : Mise en production
+4. **TP4** : Monitoring et logs ✅
+5. **TP5** (à venir) : Sécurité et RBAC
+6. **TP6** (à venir) : Mise en production et CI/CD
 
 ## Workflow avec Claude
 

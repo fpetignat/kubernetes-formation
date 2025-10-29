@@ -1,0 +1,1260 @@
+# TP4 - Monitoring et Gestion des Logs dans Kubernetes
+
+## Objectifs du TP
+
+À la fin de ce TP, vous serez capable de :
+- Comprendre l'observabilité dans Kubernetes
+- Installer et utiliser Metrics Server pour la collecte de métriques
+- Utiliser le Dashboard Kubernetes pour la visualisation
+- Collecter et analyser les logs des pods
+- Déployer Prometheus et Grafana pour le monitoring avancé
+- Créer des dashboards personnalisés
+- Mettre en place des alertes
+- Appliquer les bonnes pratiques de monitoring
+
+## Prérequis
+
+- Avoir complété les TP1, TP2 et TP3
+- Un cluster minikube fonctionnel
+- 4 Go de RAM minimum (pour Prometheus et Grafana)
+- Connaissance des Deployments et Services
+
+## Partie 1 : Introduction à l'observabilité
+
+### 1.1 Les trois piliers de l'observabilité
+
+L'observabilité repose sur trois piliers :
+
+1. **Métriques (Metrics)** : Données numériques agrégées
+   - CPU, mémoire, réseau
+   - Requêtes par seconde
+   - Temps de réponse
+
+2. **Logs** : Enregistrements d'événements
+   - Logs applicatifs
+   - Logs système
+   - Logs d'audit
+
+3. **Traces** : Suivi des requêtes distribuées
+   - Temps de traitement
+   - Propagation entre services
+   - Identification des goulots d'étranglement
+
+### 1.2 Architecture de monitoring Kubernetes
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   Grafana (Visualisation)           │
+└──────────────────────┬──────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────┐
+│              Prometheus (Collecte)                  │
+└──────────────────────┬──────────────────────────────┘
+                       │
+         ┌─────────────┼─────────────┐
+         │             │             │
+    ┌────▼────┐   ┌────▼────┐   ┌───▼─────┐
+    │ Node    │   │ Pods    │   │ cAdvisor│
+    │ Exporter│   │ Metrics │   │         │
+    └─────────┘   └─────────┘   └─────────┘
+```
+
+## Partie 2 : Metrics Server
+
+### 2.1 Qu'est-ce que Metrics Server ?
+
+Metrics Server collecte les métriques de ressources (CPU, mémoire) des nœuds et pods via l'API kubelet.
+
+### 2.2 Installation de Metrics Server
+
+```bash
+# Activer l'addon metrics-server dans minikube
+minikube addons enable metrics-server
+
+# Vérifier le déploiement
+kubectl get deployment metrics-server -n kube-system
+
+# Attendre que le pod soit prêt
+kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system --timeout=60s
+```
+
+### 2.3 Utiliser les métriques
+
+**Exercice 1 : Métriques de base**
+
+```bash
+# Voir l'utilisation des nœuds
+kubectl top nodes
+
+# Créer un déploiement de test
+kubectl create deployment nginx-test --image=nginx:alpine --replicas=3
+
+# Attendre que les pods soient prêts
+kubectl wait --for=condition=ready pod -l app=nginx-test --timeout=60s
+
+# Voir l'utilisation des pods
+kubectl top pods
+
+# Métriques d'un namespace spécifique
+kubectl top pods -n kube-system
+
+# Trier par consommation CPU
+kubectl top pods --sort-by=cpu
+
+# Trier par consommation mémoire
+kubectl top pods --sort-by=memory
+```
+
+**Note** : Les métriques peuvent prendre 1-2 minutes pour apparaître après l'installation.
+
+### 2.4 Horizontal Pod Autoscaler (HPA)
+
+Le HPA ajuste automatiquement le nombre de replicas basé sur les métriques.
+
+Créer `01-hpa-demo.yaml` :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: php-apache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: php-apache
+  template:
+    metadata:
+      labels:
+        app: php-apache
+    spec:
+      containers:
+      - name: php-apache
+        image: registry.k8s.io/hpa-example
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 200m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: php-apache
+spec:
+  selector:
+    app: php-apache
+  ports:
+  - port: 80
+    targetPort: 80
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: php-apache-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: php-apache
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+```
+
+**Exercice 2 : Tester l'autoscaling**
+
+```bash
+# Appliquer le manifest
+kubectl apply -f 01-hpa-demo.yaml
+
+# Vérifier le HPA
+kubectl get hpa
+
+# Observer l'état initial
+kubectl get hpa php-apache-hpa -w &
+
+# Dans un autre terminal, générer de la charge
+kubectl run load-generator --image=busybox --restart=Never -- /bin/sh -c "while sleep 0.01; do wget -q -O- http://php-apache; done"
+
+# Observer le scaling (attendre 2-3 minutes)
+kubectl get pods -l app=php-apache -w
+
+# Après quelques minutes, arrêter le générateur de charge
+kubectl delete pod load-generator
+
+# Observer le scale down (prend environ 5 minutes)
+kubectl get hpa php-apache-hpa -w
+```
+
+## Partie 3 : Dashboard Kubernetes
+
+### 3.1 Activer le Dashboard
+
+```bash
+# Activer le dashboard dans minikube
+minikube addons enable dashboard
+
+# Vérifier le déploiement
+kubectl get pods -n kubernetes-dashboard
+
+# Lancer le dashboard
+minikube dashboard
+```
+
+Le dashboard s'ouvre automatiquement dans votre navigateur.
+
+### 3.2 Explorer le Dashboard
+
+**Fonctionnalités principales** :
+- Vue d'ensemble du cluster
+- État des déploiements, pods, services
+- Utilisation des ressources (CPU, mémoire)
+- Logs des pods
+- Exécution de commandes dans les pods
+- Édition des ressources
+
+**Exercice 3 : Navigation dans le Dashboard**
+
+1. Naviguez vers "Workloads" → "Deployments"
+2. Sélectionnez le namespace "default"
+3. Cliquez sur un déploiement
+4. Explorez les informations affichées
+5. Cliquez sur "Pods" et sélectionnez un pod
+6. Consultez les logs du pod
+7. Essayez la fonction "Exec" pour ouvrir un shell
+
+## Partie 4 : Gestion des Logs
+
+### 4.1 Logs avec kubectl
+
+```bash
+# Voir les logs d'un pod
+kubectl logs <pod-name>
+
+# Logs en temps réel (-f = follow)
+kubectl logs -f <pod-name>
+
+# Logs d'un conteneur spécifique dans un pod multi-conteneurs
+kubectl logs <pod-name> -c <container-name>
+
+# Logs du conteneur précédent (en cas de crash)
+kubectl logs <pod-name> --previous
+
+# Dernières N lignes
+kubectl logs <pod-name> --tail=50
+
+# Logs depuis X minutes
+kubectl logs <pod-name> --since=5m
+
+# Logs avec timestamps
+kubectl logs <pod-name> --timestamps
+```
+
+### 4.2 Application de démonstration avec logs
+
+Créer `02-logging-demo.yaml` :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: log-generator
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: log-generator
+  template:
+    metadata:
+      labels:
+        app: log-generator
+    spec:
+      containers:
+      - name: logger
+        image: busybox
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - >
+            while true; do
+              echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] Application running - Request ID: $RANDOM";
+              sleep 2;
+              if [ $((RANDOM % 10)) -eq 0 ]; then
+                echo "$(date '+%Y-%m-%d %H:%M:%S') [ERROR] Something went wrong!";
+              fi
+            done
+```
+
+**Exercice 4 : Analyser les logs**
+
+```bash
+# Déployer l'application
+kubectl apply -f 02-logging-demo.yaml
+
+# Lister les pods
+kubectl get pods -l app=log-generator
+
+# Voir les logs d'un pod
+POD_NAME=$(kubectl get pods -l app=log-generator -o jsonpath='{.items[0].metadata.name}')
+kubectl logs $POD_NAME
+
+# Suivre les logs en temps réel
+kubectl logs -f $POD_NAME
+
+# Rechercher les erreurs
+kubectl logs $POD_NAME | grep ERROR
+
+# Logs de tous les pods avec le label app=log-generator
+kubectl logs -l app=log-generator --all-containers=true
+
+# Logs depuis les 5 dernières minutes
+kubectl logs $POD_NAME --since=5m
+```
+
+### 4.3 Logging multi-conteneurs
+
+Créer `03-multi-container-logging.yaml` :
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: multi-log-pod
+spec:
+  containers:
+  - name: frontend
+    image: busybox
+    command: ["/bin/sh"]
+    args:
+      - -c
+      - >
+        while true; do
+          echo "[FRONTEND] Handling request at $(date)";
+          sleep 3;
+        done
+
+  - name: backend
+    image: busybox
+    command: ["/bin/sh"]
+    args:
+      - -c
+      - >
+        while true; do
+          echo "[BACKEND] Processing data at $(date)";
+          sleep 5;
+        done
+
+  - name: cache
+    image: busybox
+    command: ["/bin/sh"]
+    args:
+      - -c
+      - >
+        while true; do
+          echo "[CACHE] Cache hit/miss at $(date)";
+          sleep 4;
+        done
+```
+
+**Exercice 5 : Logs multi-conteneurs**
+
+```bash
+# Créer le pod
+kubectl apply -f 03-multi-container-logging.yaml
+
+# Voir les logs de chaque conteneur
+kubectl logs multi-log-pod -c frontend
+kubectl logs multi-log-pod -c backend
+kubectl logs multi-log-pod -c cache
+
+# Suivre les logs de plusieurs conteneurs en parallèle (dans des terminaux séparés)
+kubectl logs -f multi-log-pod -c frontend
+kubectl logs -f multi-log-pod -c backend
+kubectl logs -f multi-log-pod -c cache
+
+# Astuce : Utiliser stern pour voir tous les logs
+# Installation de stern (optionnel)
+# wget https://github.com/stern/stern/releases/download/v1.27.0/stern_1.27.0_linux_amd64.tar.gz
+# tar xzf stern_1.27.0_linux_amd64.tar.gz
+# sudo mv stern /usr/local/bin/
+
+# Utilisation de stern (si installé)
+# stern multi-log-pod
+```
+
+## Partie 5 : Prometheus et Grafana
+
+### 5.1 Architecture Prometheus
+
+Prometheus est un système de monitoring et d'alerte open-source :
+- **Collecte** : Scrape les métriques des cibles
+- **Stockage** : Base de données time-series
+- **Requêtes** : Langage PromQL
+- **Alertes** : Règles d'alerte configurables
+
+### 5.2 Installation de Prometheus
+
+Créer `04-prometheus-deployment.yaml` :
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+      - job_name: 'kubernetes-nodes'
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - source_labels: [__address__]
+            regex: '(.*):10250'
+            replacement: '${1}:10255'
+            target_label: __address__
+
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+
+      - job_name: 'kubernetes-service-endpoints'
+        kubernetes_sd_configs:
+          - role: endpoints
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.45.0
+        args:
+          - '--config.file=/etc/prometheus/prometheus.yml'
+          - '--storage.tsdb.path=/prometheus'
+          - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+          - '--web.console.templates=/usr/share/prometheus/consoles'
+        ports:
+        - containerPort: 9090
+          name: web
+        volumeMounts:
+        - name: prometheus-config
+          mountPath: /etc/prometheus
+        - name: prometheus-storage
+          mountPath: /prometheus
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+      volumes:
+      - name: prometheus-config
+        configMap:
+          name: prometheus-config
+      - name: prometheus-storage
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  type: NodePort
+  selector:
+    app: prometheus
+  ports:
+  - port: 9090
+    targetPort: 9090
+    nodePort: 30090
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - nodes/proxy
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - extensions
+  resources:
+  - ingresses
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: monitoring
+```
+
+**Exercice 6 : Déployer Prometheus**
+
+```bash
+# Appliquer la configuration
+kubectl apply -f 04-prometheus-deployment.yaml
+
+# Vérifier le déploiement
+kubectl get all -n monitoring
+
+# Attendre que Prometheus soit prêt
+kubectl wait --for=condition=ready pod -l app=prometheus -n monitoring --timeout=120s
+
+# Obtenir l'URL de Prometheus
+minikube service prometheus -n monitoring --url
+
+# Ou avec port-forward
+kubectl port-forward -n monitoring svc/prometheus 9090:9090
+```
+
+Accédez à Prometheus via `http://localhost:9090` (si vous utilisez port-forward).
+
+### 5.3 Explorer Prometheus
+
+**Exercice 7 : Requêtes PromQL**
+
+Dans l'interface web de Prometheus :
+
+```promql
+# Voir tous les pods
+up
+
+# Utilisation CPU des conteneurs
+container_cpu_usage_seconds_total
+
+# Utilisation mémoire
+container_memory_usage_bytes
+
+# Nombre de pods par namespace
+count(kube_pod_info) by (namespace)
+
+# Taux de requêtes HTTP (si métriques disponibles)
+rate(http_requests_total[5m])
+
+# CPU usage par pod
+rate(container_cpu_usage_seconds_total{pod!=""}[5m])
+
+# Mémoire utilisée par pod
+sum(container_memory_usage_bytes{pod!=""}) by (pod)
+```
+
+### 5.4 Installation de Grafana
+
+Créer `05-grafana-deployment.yaml` :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:10.0.0
+        ports:
+        - containerPort: 3000
+          name: web
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          value: "admin"
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "admin123"
+        - name: GF_USERS_ALLOW_SIGN_UP
+          value: "false"
+        volumeMounts:
+        - name: grafana-storage
+          mountPath: /var/lib/grafana
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: grafana-storage
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  type: NodePort
+  selector:
+    app: grafana
+  ports:
+  - port: 3000
+    targetPort: 3000
+    nodePort: 30300
+```
+
+**Exercice 8 : Déployer Grafana**
+
+```bash
+# Appliquer la configuration
+kubectl apply -f 05-grafana-deployment.yaml
+
+# Vérifier le déploiement
+kubectl get pods -n monitoring
+
+# Attendre que Grafana soit prêt
+kubectl wait --for=condition=ready pod -l app=grafana -n monitoring --timeout=120s
+
+# Obtenir l'URL de Grafana
+minikube service grafana -n monitoring --url
+
+# Ou avec port-forward
+kubectl port-forward -n monitoring svc/grafana 3000:3000
+```
+
+Accédez à Grafana via `http://localhost:3000`
+- **Username** : admin
+- **Password** : admin123
+
+### 5.5 Configurer Grafana avec Prometheus
+
+**Exercice 9 : Ajouter Prometheus comme source de données**
+
+1. Connectez-vous à Grafana
+2. Cliquez sur "Configuration" (⚙️) → "Data Sources"
+3. Cliquez sur "Add data source"
+4. Sélectionnez "Prometheus"
+5. Configurez :
+   - **URL** : `http://prometheus.monitoring.svc.cluster.local:9090`
+   - Cliquez sur "Save & Test"
+
+### 5.6 Créer un Dashboard
+
+**Exercice 10 : Dashboard personnalisé**
+
+1. Cliquez sur "+" → "Dashboard" → "Add new panel"
+2. Dans "Query", sélectionnez "Prometheus"
+3. Entrez une requête PromQL :
+   ```promql
+   rate(container_cpu_usage_seconds_total{pod!=""}[5m])
+   ```
+4. Configurez la visualisation (Graph, Gauge, Table, etc.)
+5. Définissez un titre : "CPU Usage per Pod"
+6. Cliquez sur "Apply"
+7. Ajoutez d'autres panels :
+   - Mémoire : `container_memory_usage_bytes{pod!=""}`
+   - Nombre de pods : `count(kube_pod_info) by (namespace)`
+   - Network I/O : `rate(container_network_receive_bytes_total[5m])`
+
+8. Sauvegardez le dashboard : "Save dashboard" (💾)
+
+### 5.7 Importer des dashboards pré-configurés
+
+**Exercice 11 : Importer un dashboard**
+
+1. Dans Grafana, cliquez sur "+" → "Import"
+2. Entrez un ID de dashboard (ex: **315** pour Kubernetes cluster monitoring)
+3. Cliquez sur "Load"
+4. Sélectionnez la source de données Prometheus
+5. Cliquez sur "Import"
+
+**Dashboards recommandés** :
+- **315** : Kubernetes cluster monitoring (Prometheus)
+- **747** : Kubernetes Deployment metrics
+- **6417** : Kubernetes Cluster (Prometheus)
+- **8588** : Kubernetes Deployment Statefulset Daemonset metrics
+
+## Partie 6 : Application instrumentée
+
+### 6.1 Application avec métriques Prometheus
+
+Créer `06-instrumented-app.yaml` :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+  namespace: monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: demo-app
+  template:
+    metadata:
+      labels:
+        app: demo-app
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: app
+        image: fabxc/instrumented_app:latest
+        ports:
+        - containerPort: 8080
+          name: metrics
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-app
+  namespace: monitoring
+spec:
+  selector:
+    app: demo-app
+  ports:
+  - port: 8080
+    targetPort: 8080
+```
+
+**Exercice 12 : Déployer et monitorer l'application**
+
+```bash
+# Déployer l'application
+kubectl apply -f 06-instrumented-app.yaml
+
+# Vérifier le déploiement
+kubectl get pods -n monitoring -l app=demo-app
+
+# Accéder aux métriques
+kubectl port-forward -n monitoring svc/demo-app 8080:8080 &
+curl http://localhost:8080/metrics
+pkill -f "port-forward.*8080"
+
+# Dans Prometheus (après quelques minutes), vérifier que les métriques sont collectées
+# Requête : up{job="kubernetes-pods", app="demo-app"}
+```
+
+Dans Grafana, créez un panel avec :
+```promql
+rate(http_requests_total{job="kubernetes-pods"}[5m])
+```
+
+## Partie 7 : Alerting
+
+### 7.1 Règles d'alerte Prometheus
+
+Créer `07-prometheus-rules.yaml` :
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: monitoring
+data:
+  alert.rules: |
+    groups:
+    - name: example
+      interval: 30s
+      rules:
+      # Alerte si un pod est down
+      - alert: PodDown
+        expr: up{job="kubernetes-pods"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pod {{ $labels.pod }} is down"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been down for more than 1 minute."
+
+      # Alerte sur CPU élevé
+      - alert: HighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total{pod!=""}[5m]) > 0.8
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.pod }}"
+          description: "Pod {{ $labels.pod }} has high CPU usage (> 80%)"
+
+      # Alerte sur mémoire élevée
+      - alert: HighMemoryUsage
+        expr: container_memory_usage_bytes{pod!=""} > 500000000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.pod }}"
+          description: "Pod {{ $labels.pod }} is using more than 500MB of memory"
+
+      # Alerte si trop de pods en erreur
+      - alert: TooManyPodErrors
+        expr: count(kube_pod_status_phase{phase="Failed"}) > 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Too many pods in failed state"
+          description: "More than 5 pods are in failed state"
+```
+
+```bash
+# Appliquer les règles
+kubectl apply -f 07-prometheus-rules.yaml
+
+# Mettre à jour le déploiement Prometheus pour charger les règles
+# (Ajouter le volume dans le déploiement Prometheus)
+```
+
+### 7.2 Visualiser les alertes
+
+Dans l'interface Prometheus :
+1. Allez dans "Alerts"
+2. Vous verrez les règles d'alerte configurées
+3. Les alertes actives apparaîtront en rouge
+
+## Partie 8 : Logging avancé (Introduction)
+
+### 8.1 Stack EFK/ELK
+
+Pour une gestion avancée des logs, on utilise généralement :
+
+**Stack EFK** :
+- **E**lasticsearch : Stockage et indexation des logs
+- **F**luentd/Fluent Bit : Collecte et agrégation des logs
+- **K**ibana : Visualisation
+
+**Stack ELK** :
+- **E**lasticsearch
+- **L**ogstash : Collecte et transformation
+- **K**ibana
+
+### 8.2 Installation simplifiée avec Fluentd
+
+Créer `08-fluentd-daemonset.yaml` :
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluentd
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fluentd
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fluentd
+roleRef:
+  kind: ClusterRole
+  name: fluentd
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: fluentd
+  namespace: kube-system
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluentd
+  namespace: kube-system
+  labels:
+    app: fluentd
+spec:
+  selector:
+    matchLabels:
+      app: fluentd
+  template:
+    metadata:
+      labels:
+        app: fluentd
+    spec:
+      serviceAccountName: fluentd
+      containers:
+      - name: fluentd
+        image: fluent/fluentd-kubernetes-daemonset:v1-debian-elasticsearch
+        env:
+        - name: FLUENT_ELASTICSEARCH_HOST
+          value: "elasticsearch.logging.svc.cluster.local"
+        - name: FLUENT_ELASTICSEARCH_PORT
+          value: "9200"
+        - name: FLUENT_ELASTICSEARCH_SCHEME
+          value: "http"
+        volumeMounts:
+        - name: varlog
+          mountPath: /var/log
+        - name: varlibdockercontainers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+        resources:
+          limits:
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 200Mi
+      volumes:
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+```
+
+**Note** : L'installation complète d'EFK nécessite Elasticsearch et Kibana, ce qui dépasse le scope de ce TP. Voir les ressources complémentaires pour des guides détaillés.
+
+## Partie 9 : Bonnes pratiques
+
+### 9.1 Monitoring
+
+1. **Définir des SLIs/SLOs**
+   - Service Level Indicators : Métriques clés (latence, disponibilité)
+   - Service Level Objectives : Objectifs quantifiés (99.9% uptime)
+
+2. **Métriques à surveiller**
+   - Utilisation CPU et mémoire
+   - Latence des requêtes
+   - Taux d'erreur
+   - Saturation réseau/disque
+
+3. **Alertes pertinentes**
+   - Éviter les fausses alertes
+   - Alerter sur les symptômes, pas sur les causes
+   - Définir des seuils réalistes
+   - Inclure des runbooks dans les alertes
+
+4. **Rétention des données**
+   - Définir une politique de rétention
+   - Archiver les métriques anciennes
+   - Utiliser l'agrégation pour les données historiques
+
+### 9.2 Logging
+
+1. **Niveaux de logs structurés**
+   ```
+   DEBUG : Informations de débogage détaillées
+   INFO  : Événements généraux
+   WARN  : Situations potentiellement problématiques
+   ERROR : Erreurs nécessitant une attention
+   FATAL : Erreurs critiques causant l'arrêt
+   ```
+
+2. **Format de logs structuré**
+   ```json
+   {
+     "timestamp": "2025-10-29T10:30:00Z",
+     "level": "INFO",
+     "service": "api-backend",
+     "message": "Request processed",
+     "request_id": "abc-123",
+     "duration_ms": 45
+   }
+   ```
+
+3. **Logs à collecter**
+   - Logs applicatifs
+   - Logs système
+   - Logs d'audit
+   - Logs de sécurité
+
+4. **Rotation des logs**
+   - Limiter la taille des logs
+   - Archiver les logs anciens
+   - Utiliser logrotate
+
+### 9.3 Ressources
+
+```yaml
+# Toujours définir des resource requests et limits
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "250m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+```
+
+## Partie 10 : Exercices pratiques complets
+
+### Exercice Final 1 : Monitoring d'une application web
+
+**Mission** : Déployer une application web complète avec monitoring
+
+1. Déployez une application (nginx, redis, postgresql)
+2. Configurez Prometheus pour collecter les métriques
+3. Créez un dashboard Grafana avec :
+   - CPU et mémoire par service
+   - Nombre de pods par service
+   - Latence des requêtes (si disponible)
+4. Configurez des alertes pour :
+   - Pod down
+   - CPU > 80%
+   - Mémoire > 90%
+
+### Exercice Final 2 : Debugging avec les logs
+
+**Scénario** : Une application crash régulièrement
+
+1. Déployez cette application buggy :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buggy-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: buggy-app
+  template:
+    metadata:
+      labels:
+        app: buggy-app
+    spec:
+      containers:
+      - name: app
+        image: busybox
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - >
+            echo "Starting application...";
+            sleep 10;
+            echo "Application running";
+            sleep 20;
+            echo "ERROR: Out of memory!";
+            exit 1
+```
+
+2. Analysez les logs pour identifier le problème
+3. Utilisez `kubectl describe` pour voir les événements
+4. Corrigez l'application (ajoutez un restart loop)
+5. Vérifiez que l'application redémarre automatiquement
+
+### Exercice Final 3 : Dashboard personnalisé
+
+Créez un dashboard Grafana complet pour votre cluster :
+
+1. **Panel 1** : Cluster overview
+   - Nombre de nœuds
+   - Nombre total de pods
+   - Pods par namespace
+
+2. **Panel 2** : Ressources
+   - CPU total utilisé vs disponible
+   - Mémoire totale utilisée vs disponible
+
+3. **Panel 3** : Top pods
+   - Top 10 pods par CPU
+   - Top 10 pods par mémoire
+
+4. **Panel 4** : Network
+   - Bande passante entrante
+   - Bande passante sortante
+
+5. **Panel 5** : Alerts
+   - Nombre d'alertes actives
+   - Liste des alertes
+
+## Partie 11 : Nettoyage
+
+```bash
+# Supprimer les déploiements de test
+kubectl delete deployment nginx-test
+kubectl delete deployment php-apache
+kubectl delete hpa php-apache-hpa
+kubectl delete service php-apache
+kubectl delete deployment log-generator
+kubectl delete pod multi-log-pod
+
+# Supprimer le namespace monitoring (supprime tout dedans)
+kubectl delete namespace monitoring
+
+# Désactiver les addons (optionnel)
+minikube addons disable metrics-server
+minikube addons disable dashboard
+
+# Vérifier
+kubectl get all -n monitoring
+```
+
+## Résumé
+
+Dans ce TP, vous avez appris à :
+
+- Installer et utiliser Metrics Server
+- Configurer l'autoscaling horizontal (HPA)
+- Utiliser le Dashboard Kubernetes
+- Collecter et analyser les logs avec kubectl
+- Déployer Prometheus pour la collecte de métriques
+- Créer des dashboards avec Grafana
+- Configurer des alertes
+- Appliquer les bonnes pratiques de monitoring
+
+### Concepts clés
+
+- **Métriques** : Données numériques sur l'état du système
+- **Logs** : Enregistrements d'événements
+- **Prometheus** : Système de monitoring time-series
+- **Grafana** : Plateforme de visualisation
+- **HPA** : Autoscaling basé sur les métriques
+- **PromQL** : Langage de requête Prometheus
+- **Alerting** : Notification sur conditions définies
+
+## Ressources complémentaires
+
+### Documentation officielle
+
+- [Kubernetes Monitoring Architecture](https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/)
+- [Prometheus Documentation](https://prometheus.io/docs/)
+- [Grafana Documentation](https://grafana.com/docs/)
+- [Kubernetes Logging](https://kubernetes.io/docs/concepts/cluster-administration/logging/)
+
+### Guides avancés
+
+- [Prometheus Operator](https://github.com/prometheus-operator/prometheus-operator)
+- [EFK Stack Installation](https://www.elastic.co/guide/en/cloud-on-k8s/current/index.html)
+- [Loki (alternative à EFK)](https://grafana.com/docs/loki/latest/)
+- [Jaeger (Distributed Tracing)](https://www.jaegertracing.io/docs/)
+
+### Dashboards Grafana
+
+- [Grafana Dashboard Repository](https://grafana.com/grafana/dashboards/)
+- Dashboard ID 315 : Kubernetes cluster monitoring
+- Dashboard ID 747 : Kubernetes Deployment metrics
+- Dashboard ID 6417 : Kubernetes Cluster
+
+### Outils complémentaires
+
+- **kube-state-metrics** : Métriques sur l'état des ressources K8s
+- **node-exporter** : Métriques hardware et OS
+- **Alertmanager** : Gestion avancée des alertes
+- **Thanos** : Stockage long terme pour Prometheus
+
+## Prochaines étapes
+
+Félicitations ! Vous maîtrisez maintenant le monitoring et la gestion des logs dans Kubernetes.
+
+Continuez votre apprentissage avec :
+- **TP5** (à venir) : Mise en production et bonnes pratiques
+- **Helm** : Gestionnaire de packages Kubernetes
+- **GitOps** : Déploiement continu avec ArgoCD/Flux
+- **Service Mesh** : Istio, Linkerd
+
+## Questions de révision
+
+1. Quelle est la différence entre Metrics Server et Prometheus ?
+2. Comment fonctionne l'Horizontal Pod Autoscaler ?
+3. Quels sont les trois piliers de l'observabilité ?
+4. Comment voir les logs d'un conteneur qui a crashé ?
+5. Qu'est-ce que PromQL ?
+6. Pourquoi utiliser Grafana en plus de Prometheus ?
+7. Quelle est la différence entre logs et métriques ?
+8. Comment configurer une alerte dans Prometheus ?
+
+## Solutions des questions
+
+<details>
+<summary>Cliquez pour voir les réponses</summary>
+
+1. Metrics Server collecte uniquement CPU/mémoire pour kubectl top et HPA. Prometheus collecte des métriques plus détaillées avec rétention et requêtes avancées.
+2. HPA surveille les métriques (CPU, mémoire, custom) et ajuste automatiquement le nombre de replicas entre min et max définis.
+3. Métriques (données numériques agrégées), Logs (événements), Traces (suivi de requêtes distribuées).
+4. `kubectl logs <pod-name> --previous` pour voir les logs du conteneur précédent avant le crash.
+5. Prometheus Query Language : langage de requête pour interroger les métriques time-series.
+6. Grafana offre une meilleure visualisation, des dashboards personnalisables, et peut agréger plusieurs sources de données.
+7. Logs = événements discrets avec contexte. Métriques = valeurs numériques agrégées dans le temps.
+8. Créer une ConfigMap avec des règles d'alerte en YAML, la monter dans Prometheus, et définir expr, for, labels, annotations.
+
+</details>
+
+---
+
+**Durée estimée du TP :** 5-6 heures
+**Niveau :** Intermédiaire/Avancé
+
+**Excellent travail ! Vous êtes maintenant prêt à monitorer efficacement vos clusters Kubernetes !**
