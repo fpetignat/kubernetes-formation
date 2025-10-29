@@ -31,6 +31,10 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 
   Apprentissage approfondi de la rédaction de manifests YAML
 
+- **[TP3 - Persistance des données dans Kubernetes](tp3/README.md)**
+
+  Gestion des volumes et du stockage persistant
+
 ### Documentation complémentaire
 
 - [Installation rapide](#installation-rapide)
@@ -74,6 +78,22 @@ Maîtrisez l'écriture de manifests YAML Kubernetes et les bonnes pratiques de d
 **Durée estimée :** 5-6 heures
 **Niveau :** Intermédiaire
 
+### TP3 - Persistance des données dans Kubernetes
+
+📁 **[Accéder au TP3](tp3/README.md)**
+
+Apprenez à gérer le stockage persistant et les volumes dans Kubernetes. Ce TP couvre :
+- Types de volumes (emptyDir, hostPath, PVC)
+- PersistentVolumes et PersistentVolumeClaims
+- StorageClasses et provisionnement dynamique
+- Modes d'accès et politiques de réclamation
+- Déploiement de bases de données avec persistance
+- Expansion de volumes et snapshots
+- Bonnes pratiques de gestion du stockage
+
+**Durée estimée :** 4-5 heures
+**Niveau :** Intermédiaire
+
 ---
 
 ## Installation rapide
@@ -103,6 +123,8 @@ kubernetes-formation/
 │   └── README.md             # Guide complet du TP1
 ├── tp2/                       # TP2 - Manifests Kubernetes
 │   └── README.md             # Guide complet du TP2
+├── tp3/                       # TP3 - Persistance des données
+│   └── README.md             # Guide complet du TP3
 ├── .claude/                   # Configuration et instructions
 │   ├── INSTRUCTIONS.md        # Instructions pour Claude
 │   ├── QUICKSTART.md          # Guide de démarrage rapide
@@ -218,7 +240,7 @@ kubectl get events
 
 1. **TP1** : Bases de Kubernetes et premier déploiement ✅
 2. **TP2** : Maîtrise des manifests YAML ✅
-3. **TP3** (à venir) : Persistance des données
+3. **TP3** : Persistance des données ✅
 4. **TP4** (à venir) : Monitoring et logs
 5. **TP5** (à venir) : Mise en production
 
