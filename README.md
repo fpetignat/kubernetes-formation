@@ -39,6 +39,10 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 
   Observabilité, métriques, logs et alertes dans Kubernetes
 
+- **[TP5 - Sécurité et RBAC](tp5/README.md)**
+
+  Sécurisation des clusters, contrôle d'accès et bonnes pratiques
+
 ### Documentation complémentaire
 
 - [Installation rapide](#installation-rapide)
@@ -117,6 +121,24 @@ Maîtrisez l'observabilité et le monitoring de vos clusters Kubernetes. Ce TP c
 **Durée estimée :** 5-6 heures
 **Niveau :** Intermédiaire/Avancé
 
+### TP5 - Sécurité et RBAC
+
+📁 **[Accéder au TP5](tp5/README.md)**
+
+Maîtrisez la sécurité et le contrôle d'accès dans Kubernetes. Ce TP couvre :
+- ServiceAccounts et identités
+- RBAC : Roles, ClusterRoles, RoleBindings
+- Security Contexts et Pod Security Standards
+- Network Policies pour l'isolation réseau
+- Gestion sécurisée des Secrets
+- Audit et logging de sécurité
+- Scanner de vulnérabilités d'images
+- Admission Controllers
+- Bonnes pratiques de sécurité en production
+
+**Durée estimée :** 6-7 heures
+**Niveau :** Avancé
+
 ---
 
 ## Installation rapide
@@ -150,6 +172,8 @@ kubernetes-formation/
 │   └── README.md             # Guide complet du TP3
 ├── tp4/                       # TP4 - Monitoring et Logs
 │   └── README.md             # Guide complet du TP4
+├── tp5/                       # TP5 - Sécurité et RBAC
+│   └── README.md             # Guide complet du TP5
 ├── .claude/                   # Configuration et instructions
 │   ├── INSTRUCTIONS.md        # Instructions pour Claude
 │   ├── QUICKSTART.md          # Guide de démarrage rapide
@@ -252,14 +276,15 @@ kubectl get events
 - [Katacoda Kubernetes Scenarios](https://www.katacoda.com/courses/kubernetes)
 
 ### Concepts avancés (à explorer après les TPs)
-- Persistent Volumes et Storage
-- Ingress Controllers
-- StatefulSets
-- DaemonSets
-- Jobs et CronJobs
+- Ingress Controllers et Ingress Resources
+- StatefulSets pour applications avec état
+- DaemonSets pour déploiements sur tous les nœuds
+- Jobs et CronJobs pour tâches batch
 - Helm (gestionnaire de packages)
-- Network Policies
-- RBAC (contrôle d'accès)
+- Service Mesh (Istio, Linkerd)
+- GitOps (ArgoCD, FluxCD)
+- Custom Resource Definitions (CRDs)
+- Operators
 
 ## Progression recommandée
 
@@ -267,7 +292,7 @@ kubectl get events
 2. **TP2** : Maîtrise des manifests YAML ✅
 3. **TP3** : Persistance des données ✅
 4. **TP4** : Monitoring et logs ✅
-5. **TP5** (à venir) : Sécurité et RBAC
+5. **TP5** : Sécurité et RBAC ✅
 6. **TP6** (à venir) : Mise en production et CI/CD
 
 ## Workflow avec Claude
