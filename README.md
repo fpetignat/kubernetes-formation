@@ -1,5 +1,7 @@
 # Formation Kubernetes
 
+![Test Kubernetes Manifests](https://github.com/aboigues/kubernetes-formation/actions/workflows/test-kubernetes-manifests.yml/badge.svg)
+
 Formation complète et pratique sur Kubernetes avec des TPs progressifs pour apprendre le déploiement, la gestion et l'orchestration de conteneurs.
 
 ## Description
@@ -231,6 +233,31 @@ kubernetes-formation/
 
 4. **Réaliser les exercices pratiques**
    - Chaque TP contient des exercices avec solutions
+
+## Tests automatiques
+
+Cette formation intègre des tests automatiques via GitHub Actions pour garantir la qualité des manifests Kubernetes.
+
+### Ce qui est testé
+
+- **Validation YAML** : Syntaxe de tous les fichiers YAML du TP3
+- **Validation Kubernetes** : Conformité des manifests avec les schémas Kubernetes
+- **Tests d'intégration** : Déploiement réel sur Minikube (TP3)
+- **Extraction README** : Validation de ~163 manifests contenus dans les README
+- **Qualité documentation** : Vérification de la structure des README
+
+### Statut par TP
+
+| TP | Fichiers YAML testés | Tests d'intégration | Manifests README validés |
+|----|----------------------|---------------------|--------------------------|
+| TP1 | - | - | ~3 manifests |
+| TP2 | - | - | ~35 manifests |
+| TP3 | ✅ 9 fichiers | ✅ Tests Minikube | ~14 manifests |
+| TP4 | - | - | ~23 manifests |
+| TP5 | - | - | ~45 manifests |
+| TP6 | - | - | ~43 manifests |
+
+Pour plus de détails sur les tests, consultez [.github/workflows/README.md](.github/workflows/README.md).
 
 ## Concepts clés couverts
 
