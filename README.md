@@ -49,6 +49,17 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 
   Déploiement automatisé, GitOps, Helm et stratégies de mise en production
 
+### Préparation Certification CKAD
+
+- **[🎓 CKAD Preparation - Exercices et Examens Blancs](ckad-preparation/README.md)**
+
+  Ressources complètes pour préparer la certification CKAD (Certified Kubernetes Application Developer) :
+  - 65+ exercices couvrant tous les domaines CKAD
+  - Examens blancs chronométrés
+  - Cheatsheet des commandes essentielles
+  - Plan d'entraînement sur 6 semaines
+  - Solutions détaillées et explications
+
 ### Documentation complémentaire
 
 - [Installation rapide](#installation-rapide)
@@ -201,9 +212,15 @@ kubernetes-formation/
 │   └── README.md             # Guide complet du TP5
 ├── tp6/                       # TP6 - Mise en Production et CI/CD
 │   └── README.md             # Guide complet du TP6
+├── ckad-preparation/          # 🎓 Préparation Certification CKAD
+│   ├── README.md             # Guide principal CKAD
+│   ├── cheatsheet.md         # Commandes essentielles
+│   ├── exercises/            # 65+ exercices par domaine
+│   ├── practice-exam/        # Examens blancs
+│   └── solutions/            # Solutions détaillées
 ├── .claude/                   # Configuration et instructions
 │   ├── INSTRUCTIONS.md        # Instructions pour Claude
-│   ├── QUICKSTART.md          # Guide de démarrage rapide
+│   ├── QUICKSTART.md          # Guide de démarrage rapide (avec section CKAD)
 │   └── CONTEXT.md             # Contexte et historique
 ├── docs/                      # Documentation complémentaire
 ├── examples/                  # Exemples de manifests YAML
