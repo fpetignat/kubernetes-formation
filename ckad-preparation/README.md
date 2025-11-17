@@ -35,9 +35,9 @@ ckad-preparation/
 #### Phase 1 : Fondamentaux (Semaines 1-2)
 ```bash
 # Compléter d'abord les TPs de base
-cd ../tp1-pods-deployments && cat quickstart.md
-cd ../tp2-services && cat quickstart.md
-cd ../tp3-configmaps-secrets && cat quickstart.md
+cd ../tp1 && cat README.md
+cd ../tp2 && cat README.md
+cd ../tp3 && cat README.md
 
 # Puis pratiquer les exercices CKAD correspondants
 cd ckad-preparation/exercises/02-application-deployment
@@ -48,8 +48,8 @@ cd ckad-preparation/exercises/04-environment-config-security
 #### Phase 2 : Observabilité et Sécurité (Semaines 3-4)
 ```bash
 # TPs avancés
-cd ../tp4-health-checks && cat quickstart.md
-cd ../tp5-resources-quotas && cat quickstart.md
+cd ../tp4 && cat README.md
+cd ../tp5 && cat README.md
 
 # Exercices CKAD
 cd ckad-preparation/exercises/03-observability-maintenance
@@ -59,7 +59,7 @@ cd ckad-preparation/exercises/04-environment-config-security
 #### Phase 3 : Production Ready (Semaines 5-6)
 ```bash
 # TP CI/CD
-cd ../tp6-production-cicd && cat quickstart.md
+cd ../tp6 && cat README.md
 
 # Exercices CKAD
 cd ckad-preparation/exercises/01-application-design-build
@@ -186,12 +186,12 @@ Les 6 TPs du repository couvrent l'essentiel du curriculum CKAD :
 
 | TP | Domaine CKAD | Lien |
 |----|--------------|------|
-| TP1 | Application Deployment (20%) | [tp1-pods-deployments/](../tp1-pods-deployments/) |
-| TP2 | Services & Networking (20%) | [tp2-services/](../tp2-services/) |
-| TP3 | Environment & Config (25%) | [tp3-configmaps-secrets/](../tp3-configmaps-secrets/) |
-| TP4 | Observability (15%) | [tp4-health-checks/](../tp4-health-checks/) |
-| TP5 | Environment & Security (25%) | [tp5-resources-quotas/](../tp5-resources-quotas/) |
-| TP6 | Design & Deployment (20%) | [tp6-production-cicd/](../tp6-production-cicd/) |
+| TP1 | Application Deployment (20%) | [tp1/](../tp1/) |
+| TP2 | Services & Networking (20%) | [tp2/](../tp2/) |
+| TP3 | Environment & Config (25%) | [tp3/](../tp3/) |
+| TP4 | Observability (15%) | [tp4/](../tp4/) |
+| TP5 | Environment & Security (25%) | [tp5/](../tp5/) |
+| TP6 | Design & Deployment (20%) | [tp6/](../tp6/) |
 
 **Recommandation** : Compléter tous les TPs avant de commencer les exercices CKAD spécifiques.
 
@@ -224,7 +224,7 @@ Créez un fichier `progress.md` pour suivre votre progression :
 ## 🆘 Besoin d'aide ?
 
 - Consultez [cheatsheet.md](./cheatsheet.md) pour les commandes rapides
-- Relisez les quickstart des TPs correspondants
+- Relisez les README des TPs correspondants
 - Posez vos questions sur le Slack du cours
 - Référez-vous à la documentation officielle Kubernetes
 
