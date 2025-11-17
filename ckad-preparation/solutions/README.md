@@ -1,21 +1,39 @@
 # Solutions des Exercices et Examens CKAD
 
-Ce répertoire contiendra les solutions détaillées des exercices et examens blancs.
+Ce répertoire contient les solutions détaillées de tous les exercices et examens blancs CKAD.
 
 ## 📁 Structure
 
 ```
 solutions/
-├── README.md                                  # Ce fichier
-├── exercises/                                 # Solutions des exercices par domaine
-│   ├── 01-application-design-build.md
-│   ├── 02-application-deployment.md
-│   ├── 03-observability-maintenance.md
-│   ├── 04-environment-config-security.md
-│   └── 05-services-networking.md
-└── practice-exams/                           # Solutions des examens blancs
-    └── exam-01-solutions.md
+├── README.md                                              # Ce fichier
+├── 01-application-design-build-solutions.md              # Solutions domaine 1 (10 exercices)
+├── 02-application-deployment-solutions.md                 # Solutions domaine 2 (12 exercices)
+├── 03-observability-maintenance-solutions.md              # Solutions domaine 3 (13 exercices)
+├── 04-environment-config-security-solutions.md            # Solutions domaine 4 (15 exercices)
+├── 05-services-networking-solutions.md                    # Solutions domaine 5 (15 exercices)
+└── exam-01-solutions.md                                   # Solutions examen blanc 01 (17 questions)
 ```
+
+## 📚 Solutions Disponibles
+
+### Exercices par Domaine
+
+| Domaine | Fichier | Exercices | Points Clés |
+|---------|---------|-----------|-------------|
+| **Application Design and Build** | [01-application-design-build-solutions.md](./01-application-design-build-solutions.md) | 10 | Multi-container, Init containers, Jobs, CronJobs |
+| **Application Deployment** | [02-application-deployment-solutions.md](./02-application-deployment-solutions.md) | 12 | Deployments, Rolling updates, Scaling, Rollback |
+| **Observability and Maintenance** | [03-observability-maintenance-solutions.md](./03-observability-maintenance-solutions.md) | 13 | Probes, Logs, Debugging, Monitoring |
+| **Environment, Config & Security** | [04-environment-config-security-solutions.md](./04-environment-config-security-solutions.md) | 15 | ConfigMaps, Secrets, Resources, SecurityContext |
+| **Services and Networking** | [05-services-networking-solutions.md](./05-services-networking-solutions.md) | 15 | Services, Ingress, NetworkPolicies, DNS |
+
+**Total : 65 exercices avec solutions complètes**
+
+### Examens Blancs
+
+| Examen | Fichier | Questions | Durée | Score Min |
+|--------|---------|-----------|-------|-----------|
+| **Practice Exam 01** | [exam-01-solutions.md](./exam-01-solutions.md) | 17 | 2h | 66/100 |
 
 ## ⚠️ Important
 
