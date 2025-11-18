@@ -809,6 +809,44 @@ spec:
 
 Les snapshots permettent de créer des sauvegardes ponctuelles de vos volumes. Grâce au driver CSI installé dans la section précédente, vous pouvez maintenant créer des snapshots.
 
+**Installation de la VolumeSnapshotClass sur minikube**
+
+Sur minikube, même après avoir activé l'addon `csi-hostpath-driver`, la `VolumeSnapshotClass` nécessaire pour créer des snapshots n'est pas automatiquement créée. Il faut activer un addon supplémentaire.
+
+```bash
+# Activer l'addon volumesnapshots (qui inclut csi-hostpath-snapclass)
+minikube addons enable volumesnapshots
+
+# Vérifier que l'addon est activé
+minikube addons list | grep volumesnapshots
+
+# Vérifier que la VolumeSnapshotClass a été créée
+kubectl get volumesnapshotclass
+
+# Vous devriez voir : csi-hostpath-snapclass
+```
+
+**Alternative : Créer manuellement la VolumeSnapshotClass**
+
+Si l'addon `volumesnapshots` n'est pas disponible, vous pouvez créer manuellement la VolumeSnapshotClass :
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: csi-hostpath-snapclass
+driver: hostpath.csi.k8s.io
+deletionPolicy: Delete
+EOF
+
+# Vérifier la création
+kubectl get volumesnapshotclass
+kubectl describe volumesnapshotclass csi-hostpath-snapclass
+```
+
+**Note importante** : Sans la VolumeSnapshotClass, vous obtiendrez une erreur lors de la création de snapshots indiquant que la classe n'existe pas.
+
 **Création d'un snapshot**
 
 Créer `10-volume-snapshot.yaml` :
