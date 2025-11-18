@@ -865,12 +865,137 @@ data:
           description: "More than 5 pods are in failed state"
 ```
 
+**Exercice 13 : Configurer les règles d'alerte**
+
 ```bash
 # Appliquer les règles
 kubectl apply -f 07-prometheus-rules.yaml
 
-# Mettre à jour le déploiement Prometheus pour charger les règles
-# (Ajouter le volume dans le déploiement Prometheus)
+# Vérifier que la ConfigMap est créée
+kubectl get configmap prometheus-rules -n monitoring
+```
+
+Maintenant, il faut mettre à jour le déploiement Prometheus pour charger ces règles.
+
+Créer `07-prometheus-with-rules.yaml` (mise à jour du déploiement) :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.45.0
+        args:
+          - '--config.file=/etc/prometheus/prometheus.yml'
+          - '--storage.tsdb.path=/prometheus'
+          - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+          - '--web.console.templates=/usr/share/prometheus/consoles'
+          - '--web.enable-lifecycle'
+        ports:
+        - containerPort: 9090
+          name: web
+        volumeMounts:
+        - name: prometheus-config
+          mountPath: /etc/prometheus
+        - name: prometheus-rules
+          mountPath: /etc/prometheus-rules
+        - name: prometheus-storage
+          mountPath: /prometheus
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+      volumes:
+      - name: prometheus-config
+        configMap:
+          name: prometheus-config
+      - name: prometheus-rules
+        configMap:
+          name: prometheus-rules
+      - name: prometheus-storage
+        emptyDir: {}
+```
+
+Mettre à jour également la ConfigMap Prometheus pour inclure les règles :
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    rule_files:
+      - '/etc/prometheus-rules/alert.rules'
+
+    scrape_configs:
+      - job_name: 'kubernetes-nodes'
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - source_labels: [__address__]
+            regex: '(.*):10250'
+            replacement: '${1}:10255'
+            target_label: __address__
+
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+
+      - job_name: 'kubernetes-service-endpoints'
+        kubernetes_sd_configs:
+          - role: endpoints
+```
+
+Appliquer les modifications :
+
+```bash
+# Mettre à jour la ConfigMap Prometheus
+kubectl apply -f 04-prometheus-deployment.yaml
+
+# Mettre à jour le déploiement Prometheus
+kubectl apply -f 07-prometheus-with-rules.yaml
+
+# Attendre que le pod redémarre
+kubectl rollout status deployment/prometheus -n monitoring
+
+# Vérifier que Prometheus a bien chargé les règles
+kubectl logs -n monitoring -l app=prometheus | grep -i "Loading configuration file"
 ```
 
 ### 7.2 Visualiser les alertes
@@ -896,11 +1021,43 @@ Pour une gestion avancée des logs, on utilise généralement :
 - **L**ogstash : Collecte et transformation
 - **K**ibana
 
-### 8.2 Installation simplifiée avec Fluentd
+### 8.2 Introduction à Fluentd
+
+**Note importante** : Cette section présente une configuration simplifiée de Fluentd pour la démonstration. Pour une installation complète d'EFK avec Elasticsearch et Kibana, consultez les ressources complémentaires en fin de TP.
+
+Dans cet exercice, nous déployons Fluentd avec une sortie vers stdout pour observer la collecte des logs.
 
 Créer `08-fluentd-daemonset.yaml` :
 
 ```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-config
+  namespace: kube-system
+data:
+  fluent.conf: |
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+      pos_file /var/log/fluentd-containers.log.pos
+      tag kubernetes.*
+      read_from_head true
+      <parse>
+        @type json
+        time_format %Y-%m-%dT%H:%M:%S.%NZ
+      </parse>
+    </source>
+
+    <filter kubernetes.**>
+      @type kubernetes_metadata
+      @id filter_kube_metadata
+    </filter>
+
+    <match kubernetes.**>
+      @type stdout
+    </match>
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -954,15 +1111,14 @@ spec:
       serviceAccountName: fluentd
       containers:
       - name: fluentd
-        image: fluent/fluentd-kubernetes-daemonset:v1-debian-elasticsearch
+        image: fluent/fluentd-kubernetes-daemonset:v1.16-debian-1
         env:
-        - name: FLUENT_ELASTICSEARCH_HOST
-          value: "elasticsearch.logging.svc.cluster.local"
-        - name: FLUENT_ELASTICSEARCH_PORT
-          value: "9200"
-        - name: FLUENT_ELASTICSEARCH_SCHEME
-          value: "http"
+        - name: FLUENTD_SYSTEMD_CONF
+          value: "disable"
         volumeMounts:
+        - name: fluentd-config
+          mountPath: /fluentd/etc/fluent.conf
+          subPath: fluent.conf
         - name: varlog
           mountPath: /var/log
         - name: varlibdockercontainers
@@ -975,6 +1131,9 @@ spec:
             cpu: 100m
             memory: 200Mi
       volumes:
+      - name: fluentd-config
+        configMap:
+          name: fluentd-config
       - name: varlog
         hostPath:
           path: /var/log
@@ -983,7 +1142,33 @@ spec:
           path: /var/lib/docker/containers
 ```
 
-**Note** : L'installation complète d'EFK nécessite Elasticsearch et Kibana, ce qui dépasse le scope de ce TP. Voir les ressources complémentaires pour des guides détaillés.
+**Exercice 14 : Déployer Fluentd**
+
+```bash
+# Déployer Fluentd
+kubectl apply -f 08-fluentd-daemonset.yaml
+
+# Vérifier le DaemonSet
+kubectl get daemonset fluentd -n kube-system
+
+# Vérifier les pods Fluentd (un par nœud)
+kubectl get pods -n kube-system -l app=fluentd
+
+# Voir les logs collectés par Fluentd
+FLUENTD_POD=$(kubectl get pods -n kube-system -l app=fluentd -o jsonpath='{.items[0].metadata.name}')
+kubectl logs -n kube-system $FLUENTD_POD --tail=50
+
+# Observer les logs en temps réel
+kubectl logs -n kube-system $FLUENTD_POD -f
+```
+
+**Note** : Cette configuration affiche simplement les logs collectés vers stdout. Pour une installation complète avec Elasticsearch et Kibana, consultez les ressources complémentaires ci-dessous.
+
+**Pour aller plus loin avec EFK** :
+- Déployer Elasticsearch avec l'Elastic Cloud on Kubernetes (ECK) operator
+- Configurer Kibana pour la visualisation
+- Modifier la configuration Fluentd pour envoyer vers Elasticsearch
+- Voir : [Elastic Cloud on Kubernetes](https://www.elastic.co/guide/en/cloud-on-k8s/current/index.html)
 
 ## Partie 9 : Bonnes pratiques
 
