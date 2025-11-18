@@ -734,7 +734,52 @@ kubectl delete pod test-expansion
 - L'expansion n'est jamais possible en réduction (shrink), seulement en augmentation
 - Le provisioner `k8s.io/minikube-hostpath` supporte l'expansion mais nécessite un redémarrage
 
-### 5.2 Politiques de réclamation (Reclaim Policies)
+### 5.2 Installation du driver CSI pour minikube
+
+Pour utiliser des fonctionnalités avancées comme les snapshots de volumes, il est nécessaire d'installer le driver CSI (Container Storage Interface) sur minikube.
+
+**Pourquoi installer le CSI driver ?**
+
+Le driver CSI `csi-hostpath-driver` permet :
+- La création de snapshots de volumes
+- La restauration de volumes à partir de snapshots
+- Le clonage de volumes
+- Une gestion plus avancée du stockage
+
+**Installation de l'addon**
+
+```bash
+# Activer l'addon csi-hostpath-driver sur minikube
+minikube addons enable csi-hostpath-driver
+
+# Vérifier que l'addon est activé
+minikube addons list | grep csi-hostpath-driver
+
+# Attendre que les pods CSI soient prêts
+kubectl wait --for=condition=ready pod -n kube-system -l app=csi-hostpath-driver --timeout=120s
+```
+
+**Vérification de l'installation**
+
+```bash
+# Vérifier les pods CSI dans kube-system
+kubectl get pods -n kube-system | grep csi
+
+# Vérifier la VolumeSnapshotClass créée automatiquement
+kubectl get volumesnapshotclass
+
+# Vérifier le driver CSI
+kubectl get csidrivers
+```
+
+Vous devriez voir :
+- Les pods `csi-hostpath-driver-*` en état `Running`
+- Une `VolumeSnapshotClass` nommée `csi-hostpath-snapclass`
+- Le driver `hostpath.csi.k8s.io` dans la liste des CSI drivers
+
+**Note** : Sur minikube, le driver CSI utilise également le stockage local du nœud, mais offre des fonctionnalités supplémentaires par rapport au provisioner standard.
+
+### 5.3 Politiques de réclamation (Reclaim Policies)
 
 Les PV ont différentes politiques de réclamation :
 
@@ -760,9 +805,13 @@ spec:
     path: "/mnt/data-retain"
 ```
 
-### 5.3 Snapshots de volumes (avancé)
+### 5.4 Snapshots de volumes (avancé)
 
-Les snapshots permettent de créer des sauvegardes ponctuelles :
+Les snapshots permettent de créer des sauvegardes ponctuelles de vos volumes. Grâce au driver CSI installé dans la section précédente, vous pouvez maintenant créer des snapshots.
+
+**Création d'un snapshot**
+
+Créer `10-volume-snapshot.yaml` :
 
 ```yaml
 apiVersion: snapshot.storage.k8s.io/v1
@@ -775,7 +824,44 @@ spec:
     persistentVolumeClaimName: mysql-pvc
 ```
 
-**Note** : La fonctionnalité de snapshot nécessite un driver CSI compatible.
+**Exercice 8 : Créer et utiliser un snapshot**
+
+```bash
+# 1. Créer le snapshot du PVC MySQL
+kubectl apply -f 10-volume-snapshot.yaml
+
+# 2. Vérifier le snapshot
+kubectl get volumesnapshot
+kubectl describe volumesnapshot mysql-snapshot
+
+# 3. Restaurer depuis un snapshot - créer un nouveau PVC
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pvc-restored
+spec:
+  storageClassName: csi-hostpath-sc
+  dataSource:
+    name: mysql-snapshot
+    kind: VolumeSnapshot
+    apiGroup: snapshot.storage.k8s.io
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+EOF
+
+# 4. Vérifier le nouveau PVC
+kubectl get pvc mysql-pvc-restored
+```
+
+**Note** : Les snapshots sont utiles pour :
+- Sauvegardes avant modifications importantes
+- Clonage rapide de volumes
+- Tests et développement
+- Récupération après incident
 
 ## Partie 6 : Bonnes pratiques
 
