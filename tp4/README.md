@@ -428,11 +428,28 @@ data:
       - job_name: 'kubernetes-nodes'
         kubernetes_sd_configs:
           - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
         relabel_configs:
-          - source_labels: [__address__]
-            regex: '(.*):10250'
-            replacement: '${1}:10255'
-            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+
+      - job_name: 'kubernetes-cadvisor'
+        kubernetes_sd_configs:
+          - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __metrics_path__
+            replacement: /metrics/cadvisor
 
       - job_name: 'kubernetes-pods'
         kubernetes_sd_configs:
@@ -577,6 +594,16 @@ Accédez à Prometheus via `http://localhost:9090` (si vous utilisez port-forwar
 
 ### 5.3 Explorer Prometheus
 
+**Note importante sur les métriques cAdvisor** :
+
+Les métriques comme `container_cpu_usage_seconds_total` et `container_memory_usage_bytes` sont collectées par cAdvisor (Container Advisor) qui est intégré dans kubelet.
+
+Points importants :
+- Ces métriques utilisent le label `container` (et non `pod`)
+- Le container "POD" représente le conteneur infrastructure et doit être filtré
+- Les conteneurs vides doivent être exclus avec `container!=""`
+- Les requêtes doivent généralement agréger par `pod` et `namespace`
+
 **Exercice 7 : Requêtes PromQL**
 
 Dans l'interface web de Prometheus :
@@ -591,17 +618,20 @@ container_cpu_usage_seconds_total
 # Utilisation mémoire
 container_memory_usage_bytes
 
-# Nombre de pods par namespace
-count(kube_pod_info) by (namespace)
+# Nombre de conteneurs par pod et namespace
+count(container_memory_usage_bytes{container!="",container!="POD"}) by (pod, namespace)
+
+# Note: Pour des métriques plus complètes sur l'état du cluster (comme kube_pod_info),
+# installez kube-state-metrics (voir section Outils complémentaires)
 
 # Taux de requêtes HTTP (si métriques disponibles)
 rate(http_requests_total[5m])
 
-# CPU usage par pod
-rate(container_cpu_usage_seconds_total{pod!=""}[5m])
+# CPU usage par pod (en cores)
+sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])) by (pod, namespace)
 
 # Mémoire utilisée par pod
-sum(container_memory_usage_bytes{pod!=""}) by (pod)
+sum(container_memory_usage_bytes{container!="",container!="POD"}) by (pod, namespace)
 ```
 
 ### 5.4 Installation de Grafana
@@ -709,15 +739,15 @@ Accédez à Grafana via `http://localhost:3000`
 2. Dans "Query", sélectionnez "Prometheus"
 3. Entrez une requête PromQL :
    ```promql
-   rate(container_cpu_usage_seconds_total{pod!=""}[5m])
+   sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])) by (pod, namespace)
    ```
 4. Configurez la visualisation (Graph, Gauge, Table, etc.)
-5. Définissez un titre : "CPU Usage per Pod"
+5. Définissez un titre : "CPU Usage per Pod (cores)"
 6. Cliquez sur "Apply"
 7. Ajoutez d'autres panels :
-   - Mémoire : `container_memory_usage_bytes{pod!=""}`
-   - Nombre de pods : `count(kube_pod_info) by (namespace)`
-   - Network I/O : `rate(container_network_receive_bytes_total[5m])`
+   - Mémoire : `sum(container_memory_usage_bytes{container!="",container!="POD"}) by (pod, namespace)`
+   - Réseau reçu : `sum(rate(container_network_receive_bytes_total{container!="",container!="POD"}[5m])) by (pod, namespace)`
+   - Réseau transmis : `sum(rate(container_network_transmit_bytes_total{container!="",container!="POD"}[5m])) by (pod, namespace)`
 
 8. Sauvegardez le dashboard : "Save dashboard" (💾)
 
@@ -836,13 +866,13 @@ data:
 
       # Alerte sur CPU élevé
       - alert: HighCPUUsage
-        expr: rate(container_cpu_usage_seconds_total{pod!=""}[5m]) > 0.8
+        expr: sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])) by (pod, namespace) > 0.8
         for: 2m
         labels:
           severity: warning
         annotations:
-          summary: "High CPU usage on {{ $labels.pod }}"
-          description: "Pod {{ $labels.pod }} has high CPU usage (> 80%)"
+          summary: "High CPU usage on {{ $labels.namespace }}/{{ $labels.pod }}"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has high CPU usage (> 0.8 cores)"
 
       # Alerte sur mémoire élevée
       - alert: HighMemoryUsage
@@ -954,11 +984,28 @@ data:
       - job_name: 'kubernetes-nodes'
         kubernetes_sd_configs:
           - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
         relabel_configs:
-          - source_labels: [__address__]
-            regex: '(.*):10250'
-            replacement: '${1}:10255'
-            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+
+      - job_name: 'kubernetes-cadvisor'
+        kubernetes_sd_configs:
+          - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __metrics_path__
+            replacement: /metrics/cadvisor
 
       - job_name: 'kubernetes-pods'
         kubernetes_sd_configs:
@@ -1396,9 +1443,21 @@ Dans ce TP, vous avez appris à :
 ### Outils complémentaires
 
 - **kube-state-metrics** : Métriques sur l'état des ressources K8s
+  - Fournit des métriques comme `kube_pod_info`, `kube_deployment_status_replicas`, etc.
+  - Installation : `kubectl apply -f https://github.com/kubernetes/kube-state-metrics/releases/download/v2.10.0/standard.yaml`
+  - Nécessite d'ajouter un scrape config dans Prometheus pour le job `kube-state-metrics`
+
 - **node-exporter** : Métriques hardware et OS
+  - Fournit des métriques détaillées sur les nœuds (CPU, disque, réseau, etc.)
+  - Déployé généralement via un DaemonSet
+
 - **Alertmanager** : Gestion avancée des alertes
+  - Permet de router, grouper et gérer les notifications d'alertes
+  - Intégration avec Slack, Email, PagerDuty, etc.
+
 - **Thanos** : Stockage long terme pour Prometheus
+  - Permet de conserver les métriques sur de longues périodes
+  - Offre une vue unifiée de plusieurs instances Prometheus
 
 ## Prochaines étapes
 
