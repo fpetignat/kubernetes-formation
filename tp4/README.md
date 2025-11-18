@@ -604,6 +604,84 @@ Points importants :
 - Les conteneurs vides doivent être exclus avec `container!=""`
 - Les requêtes doivent généralement agréger par `pod` et `namespace`
 
+#### 5.3.1 Guide complet : Utiliser `container_cpu_usage_seconds_total`
+
+La métrique `container_cpu_usage_seconds_total` est **la métrique principale pour surveiller l'utilisation CPU** dans Kubernetes. C'est un **compteur cumulatif** (counter) qui représente le temps CPU total consommé par un conteneur en secondes.
+
+**🔑 Règles essentielles à respecter** :
+
+1. **Toujours utiliser `rate()`** : La métrique est cumulative, il faut calculer le taux de variation
+   ```promql
+   rate(container_cpu_usage_seconds_total[5m])
+   ```
+
+2. **Filtrer le conteneur infrastructure** : `container!="POD"`
+   ```promql
+   container_cpu_usage_seconds_total{container!="POD"}
+   ```
+
+3. **Exclure les conteneurs vides** : `container!=""`
+   ```promql
+   container_cpu_usage_seconds_total{container!="",container!="POD"}
+   ```
+
+4. **Agréger par pod et namespace** : Utiliser `sum()` et `by()`
+   ```promql
+   sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])) by (pod, namespace)
+   ```
+
+**📊 Exemples pratiques** :
+
+```promql
+# 1. Utilisation CPU par pod (en cores) - REQUÊTE STANDARD
+sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])) by (pod, namespace)
+
+# 2. Top 5 des pods les plus gourmands en CPU
+topk(5, sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])) by (pod))
+
+# 3. CPU total utilisé dans un namespace spécifique
+sum(rate(container_cpu_usage_seconds_total{namespace="monitoring",container!="",container!="POD"}[5m]))
+
+# 4. CPU total du cluster (tous les pods)
+sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m]))
+
+# 5. CPU par conteneur (détail fin)
+rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])
+
+# 6. Moyenne CPU des replicas d'un déploiement
+avg(rate(container_cpu_usage_seconds_total{pod=~"nginx-.*",container!="",container!="POD"}[5m]))
+```
+
+**💡 Comprendre les résultats** :
+
+- Résultat = **0.5** → Le pod utilise **0.5 core** (50% d'un CPU)
+- Résultat = **1.2** → Le pod utilise **1.2 cores** (plus d'un CPU complet)
+- Résultat = **0.001** → Le pod utilise **0.1%** d'un CPU (très peu)
+
+**🎯 Cas d'usage courants** :
+
+```promql
+# Identifier les pods au-dessus d'un seuil (0.8 cores)
+sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])) by (pod, namespace) > 0.8
+
+# Comparer avec les requests (nécessite kube-state-metrics)
+sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])) by (pod, namespace)
+/
+sum(kube_pod_container_resource_requests{resource="cpu"}) by (pod, namespace)
+
+# CPU par node
+sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])) by (node)
+```
+
+**⚠️ Erreurs courantes à éviter** :
+
+| ❌ Erreur | ✅ Correct |
+|-----------|-----------|
+| `container_cpu_usage_seconds_total` | `rate(container_cpu_usage_seconds_total[5m])` |
+| `rate(...[10s])` (intervalle trop court) | `rate(...[5m])` (minimum 1-5 minutes) |
+| Sans filtrer `container!="POD"` | `{container!="",container!="POD"}` |
+| Pas d'agrégation (trop de séries) | `sum(...) by (pod, namespace)` |
+
 **Exercice 7 : Requêtes PromQL**
 
 Dans l'interface web de Prometheus :
@@ -612,11 +690,17 @@ Dans l'interface web de Prometheus :
 # Voir tous les pods
 up
 
-# Utilisation CPU des conteneurs
+# Utilisation CPU des conteneurs (métrique brute)
 container_cpu_usage_seconds_total
+
+# ⭐ MEILLEURE PRATIQUE : CPU par pod (en cores)
+sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])) by (pod, namespace)
 
 # Utilisation mémoire
 container_memory_usage_bytes
+
+# Mémoire utilisée par pod
+sum(container_memory_usage_bytes{container!="",container!="POD"}) by (pod, namespace)
 
 # Nombre de conteneurs par pod et namespace
 count(container_memory_usage_bytes{container!="",container!="POD"}) by (pod, namespace)
@@ -627,11 +711,11 @@ count(container_memory_usage_bytes{container!="",container!="POD"}) by (pod, nam
 # Taux de requêtes HTTP (si métriques disponibles)
 rate(http_requests_total[5m])
 
-# CPU usage par pod (en cores)
-sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])) by (pod, namespace)
+# Top 10 pods par CPU
+topk(10, sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])) by (pod, namespace))
 
-# Mémoire utilisée par pod
-sum(container_memory_usage_bytes{container!="",container!="POD"}) by (pod, namespace)
+# Pods utilisant plus de 50% d'un core
+sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])) by (pod, namespace) > 0.5
 ```
 
 ### 5.4 Installation de Grafana
