@@ -515,11 +515,62 @@ kubectl exec -it mysql-client -- mysql -h mysql -uroot -pMotDePasseSecurise123
 
 ### 5.1 Expansion de volume
 
+L'expansion de volume permet d'augmenter la taille d'un PVC existant sans recréer le volume. Cette fonctionnalité dépend de deux conditions :
+
+1. La StorageClass doit avoir `allowVolumeExpansion: true`
+2. Le driver de stockage doit supporter l'expansion
+
+**Étape 1 : Vérifier que la StorageClass permet l'expansion**
+
 ```bash
-# Vérifier que la StorageClass permet l'expansion
+# Vérifier la StorageClass standard de minikube
 kubectl get storageclass standard -o yaml | grep allowVolumeExpansion
+```
+
+**Important** : Si `allowVolumeExpansion` n'est pas présent ou est `false`, vous avez deux options :
+
+**Option A** : Utiliser la StorageClass `fast-storage` créée dans la partie 3.3 qui supporte l'expansion :
+
+```bash
+# Créer un nouveau PVC avec fast-storage
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: expandable-pvc
+spec:
+  storageClassName: fast-storage
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+EOF
+
+# Vérifier que le PVC est bien créé
+kubectl get pvc expandable-pvc
 
 # Éditer le PVC pour augmenter la taille
+kubectl edit pvc expandable-pvc
+
+# Modifier storage: 2Gi en storage: 5Gi
+# Sauvegarder et quitter
+
+# Vérifier l'expansion
+kubectl get pvc expandable-pvc
+kubectl describe pvc expandable-pvc
+```
+
+**Option B** : Activer l'expansion sur la StorageClass standard (si vous avez les permissions) :
+
+```bash
+# Éditer la StorageClass standard
+kubectl patch storageclass standard -p '{"allowVolumeExpansion": true}'
+
+# Vérifier la modification
+kubectl get storageclass standard -o yaml | grep allowVolumeExpansion
+
+# Maintenant vous pouvez éditer le PVC dynamic-pvc
 kubectl edit pvc dynamic-pvc
 
 # Modifier storage: 2Gi en storage: 5Gi
@@ -529,6 +580,8 @@ kubectl edit pvc dynamic-pvc
 kubectl get pvc dynamic-pvc
 kubectl describe pvc dynamic-pvc
 ```
+
+**Note** : L'expansion de volume peut nécessiter un redémarrage du pod utilisant le PVC pour que la nouvelle taille soit reconnue par le système de fichiers.
 
 ### 5.2 Politiques de réclamation (Reclaim Policies)
 
