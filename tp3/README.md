@@ -583,6 +583,157 @@ kubectl describe pvc dynamic-pvc
 
 **Note** : L'expansion de volume peut nécessiter un redémarrage du pod utilisant le PVC pour que la nouvelle taille soit reconnue par le système de fichiers.
 
+#### 5.1.1 Troubleshooting : La taille n'a pas changé
+
+Si après l'expansion du PVC, la taille ne se reflète pas dans le pod, voici les étapes de diagnostic et résolution :
+
+**Étape 1 : Vérifier le statut du PVC**
+
+```bash
+# Vérifier l'état de l'expansion
+kubectl get pvc <nom-du-pvc>
+kubectl describe pvc <nom-du-pvc>
+
+# Chercher des messages comme :
+# - "Waiting for user to (re-)start a pod to finish file system resize"
+# - "FileSystemResizePending"
+```
+
+**Étape 2 : Vérifier la taille dans le pod**
+
+```bash
+# Vérifier la taille actuelle du volume dans le pod
+kubectl exec <nom-du-pod> -- df -h <point-de-montage>
+
+# Exemple avec le PVC monté sur /data :
+kubectl exec my-pod -- df -h /data
+```
+
+**Solutions selon le problème identifié :**
+
+**Solution 1 : Redémarrer le pod (le plus courant)**
+
+```bash
+# Si c'est un pod autonome
+kubectl delete pod <nom-du-pod>
+kubectl apply -f <fichier-du-pod>.yaml
+
+# Si c'est un Deployment
+kubectl rollout restart deployment <nom-du-deployment>
+
+# Attendre que le nouveau pod soit prêt
+kubectl wait --for=condition=ready pod -l app=<label> --timeout=120s
+
+# Vérifier à nouveau la taille
+kubectl exec <nom-du-pod> -- df -h <point-de-montage>
+```
+
+**Solution 2 : Redimensionner manuellement le système de fichiers**
+
+Si le redémarrage du pod ne suffit pas, il faut redimensionner manuellement le système de fichiers :
+
+```bash
+# Pour un système de fichiers ext4
+kubectl exec <nom-du-pod> -- resize2fs <device>
+
+# Exemple avec le device par défaut
+kubectl exec my-pod -- sh -c 'df -h /data && resize2fs $(df /data | tail -1 | cut -d" " -f1) && df -h /data'
+
+# Pour un système de fichiers XFS
+kubectl exec <nom-du-pod> -- xfs_growfs <point-de-montage>
+
+# Exemple
+kubectl exec my-pod -- xfs_growfs /data
+```
+
+**Solution 3 : Vérifier les conditions du PVC**
+
+```bash
+# Afficher les détails complets du PVC
+kubectl get pvc <nom-du-pvc> -o yaml
+
+# Chercher dans status.conditions pour des erreurs
+# Vérifier status.capacity vs spec.resources.requests.storage
+```
+
+**Solution 4 : Vérifier les logs du contrôleur**
+
+```bash
+# Vérifier les logs du provisioner de stockage
+kubectl logs -n kube-system -l app=storage-provisioner
+
+# Pour minikube spécifiquement
+minikube logs | grep -i "resize\|expand"
+```
+
+**Exemple complet de test d'expansion :**
+
+```bash
+# 1. Créer un pod de test avec le PVC
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-expansion
+spec:
+  containers:
+  - name: busybox
+    image: busybox
+    command: ['sh', '-c', 'sleep 3600']
+    volumeMounts:
+    - name: storage
+      mountPath: /data
+  volumes:
+  - name: storage
+    persistentVolumeClaim:
+      claimName: expandable-pvc
+EOF
+
+# 2. Vérifier la taille initiale
+kubectl exec test-expansion -- df -h /data
+
+# 3. Étendre le PVC
+kubectl patch pvc expandable-pvc -p '{"spec":{"resources":{"requests":{"storage":"5Gi"}}}}'
+
+# 4. Vérifier le statut de l'expansion
+kubectl describe pvc expandable-pvc
+
+# 5. Redémarrer le pod
+kubectl delete pod test-expansion
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-expansion
+spec:
+  containers:
+  - name: busybox
+    image: busybox
+    command: ['sh', '-c', 'sleep 3600']
+    volumeMounts:
+    - name: storage
+      mountPath: /data
+  volumes:
+  - name: storage
+    persistentVolumeClaim:
+      claimName: expandable-pvc
+EOF
+
+# 6. Attendre et vérifier la nouvelle taille
+kubectl wait --for=condition=ready pod/test-expansion --timeout=60s
+kubectl exec test-expansion -- df -h /data
+
+# Nettoyage
+kubectl delete pod test-expansion
+```
+
+**Limitations connues :**
+
+- Certains drivers de stockage ne supportent que l'expansion en ligne (sans redémarrage)
+- D'autres nécessitent obligatoirement un redémarrage du pod
+- L'expansion n'est jamais possible en réduction (shrink), seulement en augmentation
+- Le provisioner `k8s.io/minikube-hostpath` supporte l'expansion mais nécessite un redémarrage
+
 ### 5.2 Politiques de réclamation (Reclaim Policies)
 
 Les PV ont différentes politiques de réclamation :
