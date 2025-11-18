@@ -195,6 +195,10 @@ kubectl delete pod load-generator
 
 # Observer le scale down (prend environ 5 minutes)
 kubectl get hpa php-apache-hpa -w
+
+# Arrêter le watch en background du début de l'exercice
+# (Si vous avez lancé le premier watch avec &)
+pkill -f "kubectl.*hpa.*php-apache-hpa"
 ```
 
 ## Partie 3 : Dashboard Kubernetes
@@ -967,16 +971,6 @@ data:
         annotations:
           summary: "High memory usage on {{ $labels.pod }}"
           description: "Pod {{ $labels.pod }} is using more than 500MB of memory"
-
-      # Alerte si trop de pods en erreur
-      - alert: TooManyPodErrors
-        expr: count(kube_pod_status_phase{phase="Failed"}) > 5
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Too many pods in failed state"
-          description: "More than 5 pods are in failed state"
 ```
 
 **Exercice 13 : Configurer les règles d'alerte**
@@ -1116,10 +1110,10 @@ data:
 Appliquer les modifications :
 
 ```bash
-# Mettre à jour la ConfigMap Prometheus
-kubectl apply -f 04-prometheus-deployment.yaml
+# Appliquer d'abord les règles d'alerte
+kubectl apply -f 07-prometheus-rules.yaml
 
-# Mettre à jour le déploiement Prometheus
+# Mettre à jour la ConfigMap et le déploiement Prometheus avec les règles
 kubectl apply -f 07-prometheus-with-rules.yaml
 
 # Attendre que le pod redémarre
@@ -1396,34 +1390,8 @@ resources:
 
 1. Déployez cette application buggy :
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: buggy-app
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: buggy-app
-  template:
-    metadata:
-      labels:
-        app: buggy-app
-    spec:
-      containers:
-      - name: app
-        image: busybox
-        command: ["/bin/sh"]
-        args:
-          - -c
-          - >
-            echo "Starting application...";
-            sleep 10;
-            echo "Application running";
-            sleep 20;
-            echo "ERROR: Out of memory!";
-            exit 1
+```bash
+kubectl apply -f 09-buggy-app.yaml
 ```
 
 2. Analysez les logs pour identifier le problème
@@ -1582,7 +1550,7 @@ Continuez votre apprentissage avec :
 
 ---
 
-**Durée estimée du TP :** 5-6 heures
+**Durée estimée du TP :** 6-8 heures
 **Niveau :** Intermédiaire/Avancé
 
 **Excellent travail ! Vous êtes maintenant prêt à monitorer efficacement vos clusters Kubernetes !**
