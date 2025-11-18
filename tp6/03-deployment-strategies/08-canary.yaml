@@ -1,0 +1,59 @@
+# Stable version (90%)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-stable
+spec:
+  replicas: 9
+  selector:
+    matchLabels:
+      app: myapp
+      track: stable
+  template:
+    metadata:
+      labels:
+        app: myapp
+        track: stable
+    spec:
+      containers:
+      - name: app
+        image: hashicorp/http-echo:latest
+        args: ["-text=Stable Version"]
+        ports:
+        - containerPort: 5678
+---
+# Canary version (10%)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-canary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myapp
+      track: canary
+  template:
+    metadata:
+      labels:
+        app: myapp
+        track: canary
+    spec:
+      containers:
+      - name: app
+        image: hashicorp/http-echo:latest
+        args: ["-text=Canary Version"]
+        ports:
+        - containerPort: 5678
+---
+# Service commun
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp-service
+spec:
+  selector:
+    app: myapp  # Sélectionne stable + canary
+  ports:
+  - port: 80
+    targetPort: 5678

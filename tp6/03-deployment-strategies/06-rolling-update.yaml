@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rolling-app
+spec:
+  replicas: 4
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # Nombre de pods supplémentaires
+      maxUnavailable: 1  # Nombre de pods indisponibles
+  selector:
+    matchLabels:
+      app: rolling-app
+  template:
+    metadata:
+      labels:
+        app: rolling-app
+        version: v1
+    spec:
+      containers:
+      - name: app
+        image: hashicorp/http-echo:latest
+        args: ["-text=Version 1"]
+        ports:
+        - containerPort: 5678
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 5678
+          initialDelaySeconds: 5
+          periodSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rolling-app-service
+spec:
+  selector:
+    app: rolling-app
+  ports:
+  - port: 80
+    targetPort: 5678
