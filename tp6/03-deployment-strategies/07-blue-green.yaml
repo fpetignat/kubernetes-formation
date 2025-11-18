@@ -1,0 +1,61 @@
+# Blue deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-blue
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: myapp
+      version: blue
+  template:
+    metadata:
+      labels:
+        app: myapp
+        version: blue
+    spec:
+      containers:
+      - name: app
+        image: hashicorp/http-echo:latest
+        args: ["-text=Blue Version"]
+        ports:
+        - containerPort: 5678
+---
+# Green deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-green
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: myapp
+      version: green
+  template:
+    metadata:
+      labels:
+        app: myapp
+        version: green
+    spec:
+      containers:
+      - name: app
+        image: hashicorp/http-echo:latest
+        args: ["-text=Green Version"]
+        ports:
+        - containerPort: 5678
+---
+# Service pointant vers blue
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp-service
+spec:
+  selector:
+    app: myapp
+    version: blue  # Changer vers green pour switch
+  ports:
+  - port: 80
+    targetPort: 5678
+  type: LoadBalancer
