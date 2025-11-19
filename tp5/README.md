@@ -607,20 +607,214 @@ Les Network Policies contrôlent le trafic réseau entre les pods.
 - Tous les pods peuvent communiquer avec tous les pods
 - Network Policies permettent de restreindre ce trafic
 
-### 6.2 Activer Network Policies
+### 6.2 Activer Network Policies avec Calico
+
+#### Pourquoi Calico ?
+
+**Calico** est un plugin CNI (Container Network Interface) qui fournit :
+- Support natif des **Network Policies** Kubernetes
+- Routage réseau performant pour les pods
+- Sécurité réseau avancée (isolation, filtrage, etc.)
+
+**Important** : Minikube utilise par défaut le CNI "kindnet" qui **ne supporte PAS** les Network Policies. Pour utiliser les Network Policies, vous **devez** redémarrer Minikube avec Calico.
+
+#### Installation de Calico avec Minikube
+
+**Option 1 : Nouveau cluster Minikube avec Calico**
 
 ```bash
-# Dans minikube, utiliser le CNI Calico
-minikube start --cni=calico
+# Si vous avez déjà un cluster minikube en cours, supprimez-le d'abord
+minikube delete
 
-# Ou dans un cluster existant
+# Démarrer Minikube avec Calico (recommandé 4GB RAM minimum)
+minikube start --cni=calico --memory=4096 --cpus=2
+
+# Attendre que le cluster soit prêt
+kubectl wait --for=condition=Ready nodes --all --timeout=300s
+```
+
+**Option 2 : Cluster existant - redémarrer avec Calico**
+
+```bash
+# Sauvegarder vos ressources importantes si nécessaire
+kubectl get all --all-namespaces -o yaml > backup.yaml
+
+# Arrêter et supprimer le cluster actuel
 minikube stop
 minikube delete
-minikube start --cni=calico --memory=4096
 
-# Vérifier que Calico est installé
-kubectl get pods -n kube-system | grep calico
+# Redémarrer avec Calico
+minikube start --cni=calico --memory=4096 --cpus=2
 ```
+
+#### Vérification de l'installation de Calico
+
+**Étape 1 : Vérifier les pods Calico**
+
+```bash
+# Lister tous les pods Calico dans kube-system
+kubectl get pods -n kube-system | grep calico
+
+# Vous devriez voir des pods similaires à :
+# calico-kube-controllers-xxx   1/1     Running
+# calico-node-xxx                1/1     Running
+```
+
+**Étape 2 : Vérification détaillée**
+
+```bash
+# Vérifier que tous les pods Calico sont Running
+kubectl get pods -n kube-system -l k8s-app=calico-node
+
+# Vérifier les logs de Calico (optionnel)
+kubectl logs -n kube-system -l k8s-app=calico-node --tail=50
+
+# Vérifier le DaemonSet Calico
+kubectl get daemonset -n kube-system calico-node
+
+# Vérifier le Deployment du contrôleur Calico
+kubectl get deployment -n kube-system calico-kube-controllers
+```
+
+**Étape 3 : Vérifier que les Network Policies sont supportées**
+
+```bash
+# Créer une Network Policy de test
+kubectl create namespace test-np
+
+cat <<EOF | kubectl apply -f -
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: test-network-policy
+  namespace: test-np
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+EOF
+
+# Vérifier que la Network Policy est créée
+kubectl get networkpolicy -n test-np
+
+# Si cette commande retourne la policy, Calico fonctionne correctement !
+
+# Nettoyer
+kubectl delete namespace test-np
+```
+
+#### Troubleshooting : Problèmes courants
+
+**Problème 1 : Les pods Calico ne démarrent pas**
+
+```bash
+# Vérifier les événements
+kubectl get events -n kube-system --sort-by='.lastTimestamp' | grep calico
+
+# Vérifier les logs détaillés
+kubectl describe pod -n kube-system -l k8s-app=calico-node
+
+# Solution : Redémarrer avec plus de ressources
+minikube delete
+minikube start --cni=calico --memory=6144 --cpus=3
+```
+
+**Problème 2 : Calico est installé mais les Network Policies ne fonctionnent pas**
+
+```bash
+# Vérifier la version de Calico
+kubectl get pods -n kube-system -l k8s-app=calico-node -o yaml | grep "image:"
+
+# Vérifier les CRDs Calico
+kubectl get crd | grep calico
+
+# Redémarrer les pods Calico
+kubectl delete pod -n kube-system -l k8s-app=calico-node
+kubectl delete pod -n kube-system -l k8s-app=calico-kube-controllers
+```
+
+**Problème 3 : Erreur "CNI plugin not initialized"**
+
+```bash
+# Supprimer complètement le cluster et recréer
+minikube delete --all --purge
+minikube start --cni=calico --memory=4096 --cpus=2
+
+# Attendre que tout soit prêt
+kubectl wait --for=condition=Ready nodes --all --timeout=300s
+kubectl wait --for=condition=Ready pods --all -n kube-system --timeout=300s
+```
+
+#### Vérification complète de Calico
+
+```bash
+# Script de vérification complet
+echo "=== Vérification de Calico ==="
+
+# 1. Vérifier le nœud Minikube
+echo "1. Statut du nœud :"
+kubectl get nodes
+
+# 2. Vérifier les pods Calico
+echo "2. Pods Calico :"
+kubectl get pods -n kube-system -l k8s-app=calico-node
+kubectl get pods -n kube-system -l k8s-app=calico-kube-controllers
+
+# 3. Vérifier le DaemonSet
+echo "3. DaemonSet Calico :"
+kubectl get daemonset -n kube-system calico-node
+
+# 4. Vérifier que les Network Policies sont supportées
+echo "4. Test de création de Network Policy :"
+kubectl create namespace np-test
+kubectl apply -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: test-policy
+  namespace: np-test
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+EOF
+
+kubectl get networkpolicy -n np-test
+kubectl delete namespace np-test
+
+echo "=== Calico est prêt ! ==="
+```
+
+#### Alternative : Installation manuelle de Calico (si nécessaire)
+
+Si Minikube avec `--cni=calico` ne fonctionne pas, vous pouvez installer Calico manuellement :
+
+```bash
+# Démarrer Minikube sans CNI spécifique
+minikube start --network-plugin=cni --memory=4096 --cpus=2
+
+# Installer Calico manuellement
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/tigera-operator.yaml
+
+# Télécharger le manifest custom-resources
+curl -O https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/custom-resources.yaml
+
+# Appliquer la configuration
+kubectl create -f custom-resources.yaml
+
+# Attendre que Calico soit prêt
+watch kubectl get pods -n calico-system
+
+# Une fois tous les pods Running, Calico est prêt
+```
+
+#### Points importants à retenir
+
+- Calico nécessite **au moins 4 GB de RAM** pour fonctionner correctement avec Minikube
+- Si vous redémarrez Minikube **sans** l'option `--cni=calico`, les Network Policies ne fonctionneront plus
+- Pour vérifier rapidement : `kubectl get pods -n kube-system | grep calico` doit retourner au moins 2 pods
+- Les Network Policies ne s'appliquent qu'aux **nouveaux flux** de connexion, pas aux connexions existantes
 
 ### 6.3 Network Policy : Deny All
 
