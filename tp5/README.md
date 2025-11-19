@@ -1472,9 +1472,23 @@ kubectl api-resources
 curl -k https://$(minikube ip):8443/api/v1/namespaces
 
 # Accéder avec authentification
+# MÉTHODE 1 : Si votre kubeconfig utilise client-certificate-data (données base64)
 kubectl config view --raw -o jsonpath='{.users[0].user.client-certificate-data}' | base64 -d > client.crt
 kubectl config view --raw -o jsonpath='{.users[0].user.client-key-data}' | base64 -d > client.key
 
+# MÉTHODE 2 : Si votre kubeconfig utilise client-certificate (chemins de fichiers) - CAS MINIKUBE
+# Vérifier d'abord quel type est utilisé
+kubectl config view --raw -o jsonpath='{.users[0].user}'
+
+# Si vous voyez "client-certificate" et "client-key" au lieu de "*-data", utilisez cette méthode :
+CLIENT_CERT=$(kubectl config view --raw -o jsonpath='{.users[0].user.client-certificate}')
+CLIENT_KEY=$(kubectl config view --raw -o jsonpath='{.users[0].user.client-key}')
+
+# Copier les fichiers de certificats
+cp $CLIENT_CERT client.crt
+cp $CLIENT_KEY client.key
+
+# Tester l'accès avec les certificats
 curl --cert client.crt --key client.key -k https://$(minikube ip):8443/api/v1/namespaces
 ```
 
