@@ -840,6 +840,13 @@ spec:
 kubectl run pod-a --image=nginx
 kubectl run pod-b --image=busybox --command -- sleep 3600
 
+# Exposer pod-a via un service
+kubectl expose pod pod-a --port=80 --target-port=80
+
+# Attendre que les pods soient prêts
+kubectl wait --for=condition=ready pod/pod-a --timeout=60s
+kubectl wait --for=condition=ready pod/pod-b --timeout=60s
+
 # Vérifier la connectivité avant Network Policy
 kubectl exec pod-b -- wget -O- --timeout=2 http://pod-a
 
@@ -1709,7 +1716,7 @@ kubectl delete pod pod-a pod-b pod-with-sa security-context-demo \
 kubectl delete deployment backend frontend secure-app buggy-app
 
 # Supprimer les services
-kubectl delete service backend
+kubectl delete service backend pod-a --ignore-not-found=true
 
 # Supprimer les Network Policies
 kubectl delete networkpolicy --all
