@@ -247,7 +247,7 @@ kubectl auth can-i delete pods --as=system:serviceaccount:default:my-app-sa
 # Should return: no
 
 # Tester depuis un pod
-kubectl run test-permissions --image=bitnami/kubectl:latest --rm -it \
+kubectl run test-permissions --image=alpine/k8s:1.28.3 --rm -it \
   --overrides='{"spec":{"serviceAccountName":"my-app-sa"}}' -- sh
 
 # Dans le pod :
