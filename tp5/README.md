@@ -1211,14 +1211,164 @@ kubectl auth can-i delete pods --as=system:serviceaccount:default:my-app-sa
 
 ### 8.3 Audit avec kubectl-who-can
 
-```bash
-# Installer kubectl-who-can (optionnel)
-# kubectl krew install who-can
+**kubectl-who-can** est un plugin kubectl qui permet d'identifier quels utilisateurs ou ServiceAccounts ont la permission d'effectuer une action spécifique sur une ressource.
 
-# Exemples d'utilisation
-# kubectl who-can create pods
-# kubectl who-can delete secrets -n kube-system
+#### Installation de Krew
+
+**Krew** est le gestionnaire de plugins pour kubectl. Il permet d'installer et de gérer facilement des plugins kubectl.
+
+**Étape 1 : Installer Krew**
+
+```bash
+# Télécharger et installer Krew
+(
+  set -x; cd "$(mktemp -d)" &&
+  OS="$(uname | tr '[:upper:]' '[:lower:]')" &&
+  ARCH="$(uname -m | sed -e 's/x86_64/amd64/' -e 's/\(arm\)\(64\)\?.*/\1\2/' -e 's/aarch64$/arm64/')" &&
+  KREW="krew-${OS}_${ARCH}" &&
+  curl -fsSLO "https://github.com/kubernetes-sigs/krew/releases/latest/download/${KREW}.tar.gz" &&
+  tar zxvf "${KREW}.tar.gz" &&
+  ./"${KREW}" install krew
+)
+
+# Ajouter krew au PATH dans votre fichier de configuration shell
+echo 'export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"' >> ~/.bashrc
+
+# Recharger la configuration
+source ~/.bashrc
 ```
+
+**Étape 2 : Vérifier l'installation de Krew**
+
+```bash
+# Vérifier que krew est installé correctement
+kubectl krew version
+
+# Lister les plugins disponibles
+kubectl krew search
+
+# Mettre à jour la liste des plugins
+kubectl krew update
+```
+
+#### Installation du plugin who-can
+
+Une fois Krew installé, vous pouvez installer le plugin **who-can** :
+
+```bash
+# Installer le plugin who-can
+kubectl krew install who-can
+
+# Vérifier l'installation
+kubectl who-can --help
+```
+
+#### Utilisation de kubectl-who-can
+
+**Syntaxe de base** :
+```bash
+kubectl who-can VERB RESOURCE [NAME] [flags]
+```
+
+**Exercice 11 : Auditer les permissions avec who-can**
+
+```bash
+# Qui peut créer des pods dans le namespace default ?
+kubectl who-can create pods
+
+# Qui peut lister les secrets dans kube-system ?
+kubectl who-can list secrets -n kube-system
+
+# Qui peut supprimer les deployments ?
+kubectl who-can delete deployments
+
+# Qui peut obtenir un secret spécifique ?
+kubectl who-can get secrets app-secrets
+
+# Qui peut créer des roles cluster-wide ?
+kubectl who-can create clusterroles
+
+# Qui peut exécuter une commande dans un pod ?
+kubectl who-can create pods/exec
+
+# Afficher uniquement les ServiceAccounts
+kubectl who-can create pods --show-serviceaccounts
+
+# Vérifier toutes les permissions dans un namespace
+kubectl who-can '*' '*' -n secure-namespace
+```
+
+**Exemples pratiques** :
+
+```bash
+# Après avoir créé vos ServiceAccounts et Roles du TP
+# Vérifier que my-app-sa peut lire les pods
+kubectl who-can list pods
+
+# Vérifier que developer-sa peut créer des deployments
+kubectl who-can create deployments
+
+# Identifier qui a des permissions dangereuses
+kubectl who-can create pods --all-namespaces
+kubectl who-can '*' secrets -n kube-system
+kubectl who-can delete nodes
+
+# Auditer un namespace spécifique
+kubectl who-can get pods -n secure-app
+kubectl who-can delete pods -n secure-app
+```
+
+**Cas d'usage d'audit de sécurité** :
+
+```bash
+# 1. Identifier qui peut accéder aux secrets
+echo "=== Audit des accès aux secrets ==="
+kubectl who-can list secrets --all-namespaces
+kubectl who-can get secrets --all-namespaces
+kubectl who-can delete secrets --all-namespaces
+
+# 2. Identifier qui peut modifier le cluster
+echo "=== Audit des permissions cluster ==="
+kubectl who-can create nodes
+kubectl who-can delete nodes
+kubectl who-can create clusterroles
+kubectl who-can create clusterrolebindings
+
+# 3. Identifier les super-utilisateurs
+echo "=== Audit des super-utilisateurs ==="
+kubectl who-can '*' '*' --all-namespaces
+
+# 4. Vérifier l'isolation des namespaces
+echo "=== Vérification isolation team-a ==="
+kubectl who-can get pods -n team-a
+kubectl who-can delete pods -n team-a
+
+echo "=== Vérification isolation team-b ==="
+kubectl who-can get pods -n team-b
+kubectl who-can delete pods -n team-b
+```
+
+**Interprétation des résultats** :
+
+Le plugin affiche :
+- Les **Users** (utilisateurs humains)
+- Les **ServiceAccounts** (identités de pods)
+- Les **Groups** (groupes d'utilisateurs)
+
+Exemple de sortie :
+```
+ROLEBINDING            NAMESPACE  SUBJECT              TYPE            SA-NAMESPACE
+read-pods-binding      default    my-app-sa            ServiceAccount  default
+developer-binding      default    developer-sa         ServiceAccount  default
+cluster-admin          -          system:masters       Group           -
+```
+
+**Bonnes pratiques d'audit** :
+
+1. **Audit régulier** : Exécuter ces commandes régulièrement pour identifier les dérives de permissions
+2. **Principe du moindre privilège** : Si who-can montre trop de subjects, réduire les permissions
+3. **Documentation** : Documenter pourquoi chaque subject a ses permissions
+4. **Alertes** : Surveiller les permissions critiques (secrets, nodes, clusterroles)
 
 ## Partie 9 : Sécurité des images
 
