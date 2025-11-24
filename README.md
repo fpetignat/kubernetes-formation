@@ -390,11 +390,11 @@ kubectl get events
 
 1. **TP1** : Bases de Kubernetes et premier déploiement ✅
 2. **TP2** : Maîtrise des manifests YAML ✅
-3. **TP7** : Migration Docker Compose vers Kubernetes ✅ (recommandé après TP2)
-4. **TP3** : Persistance des données ✅
-5. **TP4** : Monitoring et logs ✅
-6. **TP5** : Sécurité et RBAC ✅
-7. **TP6** : Mise en production et CI/CD ✅
+3. **TP3** : Persistance des données ✅
+4. **TP4** : Monitoring et logs ✅
+5. **TP5** : Sécurité et RBAC ✅
+6. **TP6** : Mise en production et CI/CD ✅
+7. **TP7** : Migration Docker Compose vers Kubernetes ✅
 
 ## Workflow avec Claude
 
