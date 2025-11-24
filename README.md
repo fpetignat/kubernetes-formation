@@ -49,6 +49,10 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 
   Déploiement automatisé, GitOps, Helm et stratégies de mise en production
 
+- **[TP7 - Migration Docker Compose vers Kubernetes](tp7/README.md)**
+
+  Migration d'applications existantes, conversion avec Kompose et bonnes pratiques
+
 ### Préparation Certification CKAD
 
 - **[🎓 CKAD Preparation - Exercices et Examens Blancs](ckad-preparation/README.md)**
@@ -175,6 +179,25 @@ Maîtrisez le déploiement en production et l'automatisation avec Kubernetes. Ce
 **Durée estimée :** 8-10 heures
 **Niveau :** Avancé
 
+### TP7 - Migration Docker Compose vers Kubernetes
+
+📁 **[Accéder au TP7](tp7/README.md)**
+
+Apprenez à migrer vos applications Docker Compose existantes vers Kubernetes. Ce TP couvre :
+- Comprendre les différences entre Docker Compose et Kubernetes
+- Analyse d'une stack Docker Compose existante
+- Conversion manuelle des services en manifests Kubernetes
+- Utilisation de Kompose pour automatiser la conversion
+- Adaptation et optimisation pour l'environnement Kubernetes
+- Gestion des volumes, secrets et configuration
+- InitContainers pour les dépendances de démarrage
+- Health checks et resource management
+- Stratégies de migration progressive
+- Outils et bonnes pratiques de migration
+
+**Durée estimée :** 4-5 heures
+**Niveau :** Intermédiaire
+
 ---
 
 ## Installation rapide
@@ -212,6 +235,13 @@ kubernetes-formation/
 │   └── README.md             # Guide complet du TP5
 ├── tp6/                       # TP6 - Mise en Production et CI/CD
 │   └── README.md             # Guide complet du TP6
+├── tp7/                       # TP7 - Migration Docker Compose vers Kubernetes
+│   ├── README.md             # Guide complet du TP7
+│   ├── QUICKSTART.md         # Guide de démarrage rapide
+│   ├── docker-compose-app/   # Application exemple avec Docker Compose
+│   ├── kubernetes-manifests/ # Manifests Kubernetes correspondants
+│   ├── frontend/             # Fichiers frontend
+│   └── backend/              # Fichiers backend
 ├── ckad-preparation/          # 🎓 Préparation Certification CKAD
 │   ├── README.md             # Guide principal CKAD
 │   ├── cheatsheet.md         # Commandes essentielles
@@ -273,6 +303,7 @@ Cette formation intègre des tests automatiques via GitHub Actions pour garantir
 | TP4 | - | - | ~23 manifests |
 | TP5 | - | - | ~45 manifests |
 | TP6 | - | - | ~43 manifests |
+| TP7 | 13 fichiers | - | Application complète |
 
 Pour plus de détails sur les tests, consultez [.github/workflows/README.md](.github/workflows/README.md).
 
@@ -363,6 +394,7 @@ kubectl get events
 4. **TP4** : Monitoring et logs ✅
 5. **TP5** : Sécurité et RBAC ✅
 6. **TP6** : Mise en production et CI/CD ✅
+7. **TP7** : Migration Docker Compose vers Kubernetes ✅
 
 ## Workflow avec Claude
 
