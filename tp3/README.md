@@ -134,9 +134,40 @@ kubectl delete -f 01-emptydir-pod.yaml
 - **ReadOnlyMany (ROX)** : Lecture seule par plusieurs nœuds
 - **ReadWriteMany (RWX)** : Lecture-écriture par plusieurs nœuds
 
-### 2.3 Créer un PersistentVolume
+### 2.3 Créer la StorageClass pour le provisionnement manuel
 
-Créer `02-persistent-volume.yaml` :
+Avant de créer des PersistentVolumes avec un provisionnement manuel, nous devons créer une StorageClass appropriée. Sans cette StorageClass, le binding entre le PV et le PVC échouera.
+
+Créer `02-storage-class-manual.yaml` :
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: manual
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+```
+
+**Explications importantes** :
+
+- **provisioner: kubernetes.io/no-provisioner** : Indique qu'il n'y a pas de provisionnement automatique. Les PV doivent être créés manuellement par un administrateur.
+- **volumeBindingMode: WaitForFirstConsumer** : Le binding du PVC au PV ne se fera que lorsqu'un pod utilisera le PVC. Cela évite de lier un volume à un nœud avant de savoir où le pod sera schedulé.
+
+```bash
+# Créer la StorageClass
+kubectl apply -f 02-storage-class-manual.yaml
+
+# Vérifier la création
+kubectl get storageclass manual
+kubectl describe storageclass manual
+```
+
+**Note** : Cette étape est cruciale. Sans cette StorageClass, vous obtiendrez une erreur lors du binding du PVC car Kubernetes ne trouvera pas la StorageClass "manual" référencée dans les manifests.
+
+### 2.4 Créer un PersistentVolume
+
+Créer `03-persistent-volume.yaml` :
 
 ```yaml
 apiVersion: v1
@@ -162,7 +193,7 @@ spec:
 minikube ssh "sudo mkdir -p /mnt/data"
 
 # Créer le PV
-kubectl apply -f 02-persistent-volume.yaml
+kubectl apply -f 03-persistent-volume.yaml
 
 # Vérifier le PV
 kubectl get pv
@@ -171,9 +202,9 @@ kubectl describe pv pv-demo
 
 Vous devriez voir le statut **Available**.
 
-### 2.4 Créer un PersistentVolumeClaim
+### 2.5 Créer un PersistentVolumeClaim
 
-Créer `03-persistent-volume-claim.yaml` :
+Créer `04-persistent-volume-claim.yaml` :
 
 ```yaml
 apiVersion: v1
@@ -189,11 +220,25 @@ spec:
       storage: 500Mi
 ```
 
+**Note importante sur le binding** :
+
+Le PVC va chercher un PV compatible avec les critères suivants :
+- Même `storageClassName` (ici: "manual")
+- Mode d'accès compatible (ici: ReadWriteOnce)
+- Capacité suffisante (ici: 500Mi, le PV a 1Gi donc c'est OK)
+
+⚠️ **Problème courant** : Si vous voyez le PVC rester en état "Pending" indéfiniment, vérifiez que :
+1. La StorageClass "manual" a bien été créée (section 2.3)
+2. Un PV avec `storageClassName: manual` existe et est en état "Available"
+3. Les modes d'accès et la capacité correspondent
+
+Sans la StorageClass "manual", le binding échouera et vous verrez une erreur du type : "storageclass.storage.k8s.io 'manual' not found".
+
 **Exercice 3 : Créer un PVC**
 
 ```bash
 # Créer le PVC
-kubectl apply -f 03-persistent-volume-claim.yaml
+kubectl apply -f 04-persistent-volume-claim.yaml
 
 # Vérifier le PVC
 kubectl get pvc
@@ -205,9 +250,9 @@ kubectl get pv
 
 Le PV devrait maintenant être **Bound** au PVC.
 
-### 2.5 Utiliser le PVC dans un Pod
+### 2.6 Utiliser le PVC dans un Pod
 
-Créer `04-pod-with-pvc.yaml` :
+Créer `05-pod-with-pvc.yaml` :
 
 ```yaml
 apiVersion: v1
@@ -232,7 +277,7 @@ spec:
 
 ```bash
 # Créer le pod
-kubectl apply -f 04-pod-with-pvc.yaml
+kubectl apply -f 05-pod-with-pvc.yaml
 
 # Attendre que le pod soit prêt
 kubectl wait --for=condition=ready pod/pod-with-pvc --timeout=60s
@@ -249,7 +294,7 @@ pkill -f "port-forward"
 kubectl delete pod pod-with-pvc
 
 # Recréer le pod
-kubectl apply -f 04-pod-with-pvc.yaml
+kubectl apply -f 05-pod-with-pvc.yaml
 
 # Attendre que le pod soit prêt
 kubectl wait --for=condition=ready pod/pod-with-pvc --timeout=60s
@@ -285,7 +330,7 @@ Minikube fournit une StorageClass `standard` utilisant le provisioner `k8s.io/mi
 
 ### 3.3 Créer une StorageClass personnalisée
 
-Créer `05-storage-class.yaml` :
+Créer `06-storage-class.yaml` :
 
 ```yaml
 apiVersion: storage.k8s.io/v1
@@ -302,7 +347,7 @@ allowVolumeExpansion: true
 
 ```bash
 # Créer la StorageClass
-kubectl apply -f 05-storage-class.yaml
+kubectl apply -f 06-storage-class.yaml
 
 # Vérifier
 kubectl get storageclass
@@ -310,7 +355,7 @@ kubectl get storageclass
 
 ### 3.4 PVC avec provisionnement dynamique
 
-Créer `06-dynamic-pvc.yaml` :
+Créer `07-dynamic-pvc.yaml` :
 
 ```yaml
 apiVersion: v1
@@ -330,7 +375,7 @@ spec:
 
 ```bash
 # Créer le PVC
-kubectl apply -f 06-dynamic-pvc.yaml
+kubectl apply -f 07-dynamic-pvc.yaml
 
 # Observer la création automatique du PV
 kubectl get pvc dynamic-pvc
@@ -343,7 +388,7 @@ kubectl get pv
 
 ### 4.1 Déploiement MySQL avec persistance
 
-Créer `07-mysql-deployment.yaml` :
+Créer `08-mysql-deployment.yaml` :
 
 ```yaml
 apiVersion: v1
@@ -432,7 +477,7 @@ spec:
 
 ```bash
 # Appliquer le manifest complet
-kubectl apply -f 07-mysql-deployment.yaml
+kubectl apply -f 08-mysql-deployment.yaml
 
 # Vérifier les ressources créées
 kubectl get pvc mysql-pvc
@@ -484,7 +529,7 @@ Les données ont survécu à la suppression du pod !
 
 ### 4.3 Client MySQL pour tester
 
-Créer `08-mysql-client.yaml` :
+Créer `09-mysql-client.yaml` :
 
 ```yaml
 apiVersion: v1
@@ -500,7 +545,7 @@ spec:
 
 ```bash
 # Créer le client
-kubectl apply -f 08-mysql-client.yaml
+kubectl apply -f 09-mysql-client.yaml
 
 # Se connecter depuis le client
 kubectl exec -it mysql-client -- mysql -h mysql -uroot -pMotDePasseSecurise123
@@ -787,7 +832,7 @@ Les PV ont différentes politiques de réclamation :
 - **Delete** : Supprimer le PV et les données (défaut pour provisionnement dynamique)
 - **Recycle** : Effacer les données et rendre le PV disponible (obsolète)
 
-Créer `09-pv-retain.yaml` :
+Créer `10-pv-retain.yaml` :
 
 ```yaml
 apiVersion: v1
@@ -849,7 +894,7 @@ kubectl describe volumesnapshotclass csi-hostpath-snapclass
 
 **Création d'un snapshot**
 
-Créer `10-volume-snapshot.yaml` :
+Créer `11-volume-snapshot.yaml` :
 
 ```yaml
 apiVersion: snapshot.storage.k8s.io/v1
@@ -866,7 +911,7 @@ spec:
 
 ```bash
 # 1. Créer le snapshot du PVC MySQL
-kubectl apply -f 10-volume-snapshot.yaml
+kubectl apply -f 11-volume-snapshot.yaml
 
 # 2. Vérifier le snapshot
 kubectl get volumesnapshot
