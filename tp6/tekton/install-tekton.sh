@@ -8,8 +8,8 @@ echo "========================================="
 echo ""
 
 # 1. Installer Tekton Pipelines
-echo "1. Installation de Tekton Pipelines..."
-kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/latest/release.yaml
+echo "1. Installation de Tekton Pipelines v0.37.0..."
+kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/previous/v0.37.0/release.yaml
 
 echo "   Attente que Tekton Pipelines soit prêt..."
 kubectl wait --for=condition=ready pod --all -n tekton-pipelines --timeout=300s
@@ -18,16 +18,16 @@ echo "   ✓ Tekton Pipelines installé"
 echo ""
 
 # 2. Installer Tekton Triggers
-echo "2. Installation de Tekton Triggers..."
-kubectl apply -f https://storage.googleapis.com/tekton-releases/triggers/latest/release.yaml
-kubectl apply -f https://storage.googleapis.com/tekton-releases/triggers/latest/interceptors.yaml
+echo "2. Installation de Tekton Triggers v0.20.0..."
+kubectl apply -f https://storage.googleapis.com/tekton-releases/triggers/previous/v0.20.0/release.yaml
+kubectl apply -f https://storage.googleapis.com/tekton-releases/triggers/previous/v0.20.0/interceptors.yaml
 
 echo "   ✓ Tekton Triggers installé"
 echo ""
 
 # 3. Installer Tekton Dashboard
-echo "3. Installation du Tekton Dashboard..."
-kubectl apply -f https://storage.googleapis.com/tekton-releases/dashboard/latest/release.yaml
+echo "3. Installation du Tekton Dashboard v0.28.0..."
+kubectl apply -f https://storage.googleapis.com/tekton-releases/dashboard/previous/v0.28.0/tekton-dashboard-release.yaml
 
 echo "   Attente que le Dashboard soit prêt..."
 sleep 10
