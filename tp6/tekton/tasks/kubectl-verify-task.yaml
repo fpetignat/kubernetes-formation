@@ -1,0 +1,33 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kubectl-verify
+  namespace: default
+spec:
+  description: Vérification du déploiement
+  params:
+    - name: deployment-name
+      type: string
+    - name: namespace
+      type: string
+      default: default
+  steps:
+    - name: verify-deployment
+      image: bitnami/kubectl:latest
+      script: |
+        #!/bin/sh
+        set -e
+        echo "Vérification du rollout..."
+        kubectl rollout status deployment/$(params.deployment-name) -n $(params.namespace)
+
+        echo "Liste des pods:"
+        kubectl get pods -n $(params.namespace)
+
+    - name: smoke-test
+      image: curlimages/curl:latest
+      script: |
+        #!/bin/sh
+        set -e
+        echo "Exécution des smoke tests..."
+        # Ajouter vos tests ici
+        echo "Tests terminés!"

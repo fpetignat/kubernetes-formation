@@ -1,0 +1,20 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: trivy-scan
+  namespace: default
+spec:
+  description: Scan de sécurité avec Trivy
+  params:
+    - name: image
+      type: string
+      description: Image à scanner
+  steps:
+    - name: scan
+      image: aquasec/trivy:latest
+      script: |
+        #!/bin/sh
+        set -e
+        echo "Scan de sécurité de l'image..."
+        trivy image --severity HIGH,CRITICAL $(params.image) || true
+        echo "Scan terminé!"

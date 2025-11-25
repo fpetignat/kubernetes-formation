@@ -18,8 +18,26 @@
 - Avoir complété les TP1 à TP5
 - Un cluster minikube fonctionnel
 - Connaissance des concepts de base de Kubernetes
-- Compte GitHub (pour le CI/CD)
+- Compte GitHub (pour le CI/CD) **OU** voir l'alternative Tekton ci-dessous
 - Compréhension de Docker et des conteneurs
+
+> **Note importante** : Si vous ne souhaitez pas créer de compte GitHub, consultez le fichier [ALTERNATIVE_SANS_GITHUB.md](./ALTERNATIVE_SANS_GITHUB.md) qui explique comment mettre en place un pipeline CI/CD complet avec **Tekton**, directement dans votre cluster Kubernetes, sans aucun service externe.
+
+## Choix de votre solution CI/CD
+
+Ce TP propose **deux approches** pour le CI/CD :
+
+### Option 1 : GitHub Actions (recommandé pour la découverte)
+- **Avantages** : Interface intuitive, intégration GitHub, gratuit pour usage personnel
+- **Inconvénients** : Nécessite un compte GitHub
+- **Documentation** : Voir Partie 3 de ce README
+
+### Option 2 : Tekton (recommandé pour l'apprentissage Kubernetes)
+- **Avantages** : Kubernetes-native, aucun compte externe, contrôle total
+- **Inconvénients** : Plus technique, nécessite plus de configuration
+- **Documentation** : Voir [ALTERNATIVE_SANS_GITHUB.md](./ALTERNATIVE_SANS_GITHUB.md)
+
+**Les deux approches couvrent les mêmes fonctionnalités** : tests automatiques, build Docker, scan de sécurité, et déploiement sur Kubernetes.
 
 ## Partie 1 : Introduction à Helm
 
@@ -2092,12 +2110,14 @@ Dans ce TP, vous avez appris à :
 
 - **Helm** : Gérer des applications avec des Charts
 - **Ingress** : Exposer des services avec routing avancé
-- **CI/CD** : Automatiser les déploiements avec GitHub Actions
+- **CI/CD** : Automatiser les déploiements avec GitHub Actions ou Tekton
 - **Stratégies de déploiement** : Rolling, Blue-Green, Canary
 - **GitOps** : Déployer avec ArgoCD
 - **Production** : HPA, PDB, health checks, monitoring
 - **Secrets** : Sealed Secrets pour Git
 - **Kustomize** : Gérer plusieurs environnements
+
+> **Alternative sans compte GitHub** : Voir [ALTERNATIVE_SANS_GITHUB.md](./ALTERNATIVE_SANS_GITHUB.md) pour utiliser Tekton au lieu de GitHub Actions.
 
 ### Concepts clés
 
@@ -2120,6 +2140,7 @@ Dans ce TP, vous avez appris à :
 - [Ingress NGINX](https://kubernetes.github.io/ingress-nginx/)
 - [ArgoCD](https://argo-cd.readthedocs.io/)
 - [GitHub Actions](https://docs.github.com/en/actions)
+- [Tekton](https://tekton.dev/docs/) - Alternative CI/CD sans compte GitHub
 - [Kustomize](https://kustomize.io/)
 - [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets)
 
