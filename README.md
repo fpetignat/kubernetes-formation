@@ -69,6 +69,7 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 - [Installation rapide](#installation-rapide)
 - [Structure du projet](#structure-du-projet)
 - [Commandes kubectl essentielles](#commandes-kubectl-essentielles)
+- **[📘 Guide Jobs et CronJobs](docs/JOBS_CRONJOBS.md)** - Guide complet sur les tâches batch et planifiées
 - [Ressources complémentaires](#ressources-complémentaires)
 - [Workflow avec Claude](#workflow-avec-claude)
 
@@ -379,7 +380,7 @@ kubectl get events
 - Ingress Controllers et Ingress Resources
 - StatefulSets pour applications avec état
 - DaemonSets pour déploiements sur tous les nœuds
-- Jobs et CronJobs pour tâches batch
+- **[Jobs et CronJobs](docs/JOBS_CRONJOBS.md)** pour tâches batch et planifiées
 - Helm (gestionnaire de packages)
 - Service Mesh (Istio, Linkerd)
 - GitOps (ArgoCD, FluxCD)
