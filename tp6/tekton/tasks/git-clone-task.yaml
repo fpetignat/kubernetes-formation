@@ -18,7 +18,7 @@ spec:
       description: Branch, tag ou SHA à cloner
   steps:
     - name: clone
-      image: gcr.io/tekton-releases/github.com/tektoncd/pipeline/cmd/git-init:v0.40.2
+      image: gcr.io/tekton-releases/github.com/tektoncd/pipeline/cmd/git-init:v0.37.0
       script: |
         #!/bin/sh
         set -e
