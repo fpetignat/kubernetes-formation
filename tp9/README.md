@@ -133,6 +133,402 @@ Node Network: 192.168.1.0/24
 
 ## Partie 2 : Installation d'un cluster multi-noeud avec kubeadm
 
+### 2.0 Création et provisionnement des nœuds
+
+Avant d'installer Kubernetes, vous devez créer les machines qui formeront votre cluster. Voici différentes approches selon votre environnement.
+
+#### 2.0.1 Architecture cible pour ce TP
+
+Pour ce TP, nous allons créer :
+- **3 nœuds Control Plane** : master1, master2, master3
+- **3 nœuds Workers** : worker1, worker2, worker3
+- **1 nœud Load Balancer** : lb (optionnel, peut être sur master1)
+
+**Spécifications recommandées par nœud :**
+
+| Type | CPU | RAM | Disk | IP |
+|------|-----|-----|------|-----|
+| Control Plane | 2 vCPU | 4 Go | 40 Go | 192.168.1.10-12 |
+| Worker | 2 vCPU | 4 Go | 40 Go | 192.168.1.20-22 |
+| Load Balancer | 1 vCPU | 1 Go | 20 Go | 192.168.1.100 |
+
+#### 2.0.2 Option 1 : VirtualBox / VMware (local)
+
+**Étape 1 : Télécharger l'ISO**
+```bash
+# AlmaLinux 9
+wget https://repo.almalinux.org/almalinux/9/isos/x86_64/AlmaLinux-9-latest-x86_64-minimal.iso
+
+# Ou Ubuntu Server 22.04
+wget https://releases.ubuntu.com/22.04/ubuntu-22.04.3-live-server-amd64.iso
+```
+
+**Étape 2 : Créer la première VM (master1)**
+
+Dans VirtualBox :
+1. Cliquer sur "Nouvelle"
+2. Nom : master1
+3. Type : Linux, Version : Red Hat (64-bit) ou Ubuntu (64-bit)
+4. Mémoire : 4096 Mo
+5. Disque : Créer un disque virtuel (40 Go, VDI, dynamique)
+6. Configuration :
+   - Processeur : 2 CPU
+   - Réseau :
+     - Carte 1 : Accès par pont (Bridged) ou Réseau NAT
+     - Activer l'adaptateur réseau
+   - Stockage : Attacher l'ISO
+
+**Étape 3 : Installer le système**
+```bash
+# Pendant l'installation :
+# - Hostname : master1
+# - IP statique : 192.168.1.10/24
+# - Gateway : 192.168.1.1
+# - DNS : 8.8.8.8
+# - Créer un utilisateur : admin (avec sudo)
+```
+
+**Étape 4 : Configuration post-installation**
+```bash
+# SSH vers la VM
+ssh admin@192.168.1.10
+
+# Mettre à jour le système
+sudo yum update -y  # AlmaLinux
+# ou
+sudo apt update && sudo apt upgrade -y  # Ubuntu
+
+# Configurer le hostname
+sudo hostnamectl set-hostname master1
+
+# Configurer /etc/hosts sur TOUTES les machines
+cat <<EOF | sudo tee -a /etc/hosts
+192.168.1.10 master1
+192.168.1.11 master2
+192.168.1.12 master3
+192.168.1.20 worker1
+192.168.1.21 worker2
+192.168.1.22 worker3
+192.168.1.100 lb
+EOF
+
+# Désactiver SELinux (si AlmaLinux/CentOS)
+sudo setenforce 0
+sudo sed -i 's/^SELINUX=enforcing/SELINUX=permissive/' /etc/selinux/config
+
+# Configurer le firewall (ou le désactiver pour le lab)
+sudo systemctl stop firewalld
+sudo systemctl disable firewalld
+```
+
+**Étape 5 : Cloner la VM pour les autres nœuds**
+
+Dans VirtualBox :
+1. Clic droit sur master1 → Cloner
+2. Nom : master2, master3, worker1, worker2, worker3
+3. Type de clone : Clone complet
+4. Politique MAC : Générer de nouvelles adresses MAC
+
+**Sur chaque VM clonée, modifier :**
+```bash
+# Sur master2
+ssh admin@192.168.1.11
+sudo hostnamectl set-hostname master2
+sudo nmcli con mod "System eth0" ipv4.addresses 192.168.1.11/24
+sudo nmcli con down "System eth0" && sudo nmcli con up "System eth0"
+
+# Sur master3
+ssh admin@192.168.1.12
+sudo hostnamectl set-hostname master3
+sudo nmcli con mod "System eth0" ipv4.addresses 192.168.1.12/24
+sudo nmcli con down "System eth0" && sudo nmcli con up "System eth0"
+
+# Sur worker1
+ssh admin@192.168.1.20
+sudo hostnamectl set-hostname worker1
+sudo nmcli con mod "System eth0" ipv4.addresses 192.168.1.20/24
+sudo nmcli con down "System eth0" && sudo nmcli con up "System eth0"
+
+# Répéter pour worker2 et worker3
+```
+
+#### 2.0.3 Option 2 : Cloud Provider (AWS, GCP, Azure)
+
+**AWS EC2 :**
+```bash
+# Créer un VPC et un subnet
+aws ec2 create-vpc --cidr-block 10.0.0.0/16
+aws ec2 create-subnet --vpc-id vpc-xxx --cidr-block 10.0.1.0/24
+
+# Créer un Security Group
+aws ec2 create-security-group --group-name k8s-cluster --description "Kubernetes cluster"
+
+# Ouvrir les ports requis
+aws ec2 authorize-security-group-ingress --group-id sg-xxx --protocol tcp --port 6443 --cidr 0.0.0.0/0
+aws ec2 authorize-security-group-ingress --group-id sg-xxx --protocol tcp --port 2379-2380 --cidr 10.0.0.0/16
+aws ec2 authorize-security-group-ingress --group-id sg-xxx --protocol tcp --port 10250-10252 --cidr 10.0.0.0/16
+aws ec2 authorize-security-group-ingress --group-id sg-xxx --protocol tcp --port 30000-32767 --cidr 0.0.0.0/0
+
+# Lancer les instances (exemple pour master1)
+aws ec2 run-instances \
+  --image-id ami-0c55b159cbfafe1f0 \
+  --instance-type t3.medium \
+  --key-name my-key \
+  --security-group-ids sg-xxx \
+  --subnet-id subnet-xxx \
+  --private-ip-address 10.0.1.10 \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=master1},{Key=Role,Value=master}]'
+
+# Répéter pour les autres nœuds
+```
+
+**GCP Compute Engine :**
+```bash
+# Créer le réseau
+gcloud compute networks create k8s-network --subnet-mode=custom
+gcloud compute networks subnets create k8s-subnet \
+  --network=k8s-network \
+  --region=us-central1 \
+  --range=10.0.1.0/24
+
+# Créer les règles de firewall
+gcloud compute firewall-rules create k8s-allow-internal \
+  --network k8s-network \
+  --allow tcp,udp,icmp \
+  --source-ranges 10.0.1.0/24
+
+gcloud compute firewall-rules create k8s-allow-external \
+  --network k8s-network \
+  --allow tcp:22,tcp:6443,tcp:30000-32767 \
+  --source-ranges 0.0.0.0/0
+
+# Créer les instances
+for i in 1 2 3; do
+  gcloud compute instances create master$i \
+    --machine-type=e2-medium \
+    --image-family=ubuntu-2204-lts \
+    --image-project=ubuntu-os-cloud \
+    --boot-disk-size=40GB \
+    --subnet=k8s-subnet \
+    --private-network-ip=10.0.1.1$i \
+    --tags=k8s-master
+done
+
+for i in 1 2 3; do
+  gcloud compute instances create worker$i \
+    --machine-type=e2-medium \
+    --image-family=ubuntu-2204-lts \
+    --image-project=ubuntu-os-cloud \
+    --boot-disk-size=40GB \
+    --subnet=k8s-subnet \
+    --private-network-ip=10.0.1.2$i \
+    --tags=k8s-worker
+done
+```
+
+#### 2.0.4 Option 3 : Terraform (Infrastructure as Code)
+
+**Créer un fichier terraform pour automatiser :**
+
+```hcl
+# main.tf
+provider "libvirt" {
+  uri = "qemu:///system"
+}
+
+# Pool de stockage
+resource "libvirt_pool" "k8s" {
+  name = "k8s-pool"
+  type = "dir"
+  path = "/var/lib/libvirt/pools/k8s"
+}
+
+# Volume de base (image cloud)
+resource "libvirt_volume" "base" {
+  name   = "base.qcow2"
+  pool   = libvirt_pool.k8s.name
+  source = "https://cloud.almalinux.org/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2"
+  format = "qcow2"
+}
+
+# Volumes pour chaque nœud
+resource "libvirt_volume" "master" {
+  count          = 3
+  name           = "master${count.index + 1}.qcow2"
+  base_volume_id = libvirt_volume.base.id
+  pool           = libvirt_pool.k8s.name
+  size           = 42949672960  # 40 GB
+}
+
+resource "libvirt_volume" "worker" {
+  count          = 3
+  name           = "worker${count.index + 1}.qcow2"
+  base_volume_id = libvirt_volume.base.id
+  pool           = libvirt_pool.k8s.name
+  size           = 42949672960
+}
+
+# Cloud-init pour chaque nœud
+data "template_file" "user_data_master" {
+  count    = 3
+  template = file("${path.module}/cloud-init.yaml")
+  vars = {
+    hostname = "master${count.index + 1}"
+    ip_address = "192.168.1.${10 + count.index}"
+  }
+}
+
+# VMs masters
+resource "libvirt_domain" "master" {
+  count  = 3
+  name   = "master${count.index + 1}"
+  memory = "4096"
+  vcpu   = 2
+
+  disk {
+    volume_id = libvirt_volume.master[count.index].id
+  }
+
+  network_interface {
+    network_name = "default"
+    addresses    = ["192.168.1.${10 + count.index}"]
+  }
+
+  cloudinit = libvirt_cloudinit_disk.master[count.index].id
+}
+
+# VMs workers
+resource "libvirt_domain" "worker" {
+  count  = 3
+  name   = "worker${count.index + 1}"
+  memory = "4096"
+  vcpu   = 2
+
+  disk {
+    volume_id = libvirt_volume.worker[count.index].id
+  }
+
+  network_interface {
+    network_name = "default"
+    addresses    = ["192.168.1.${20 + count.index}"]
+  }
+
+  cloudinit = libvirt_cloudinit_disk.worker[count.index].id
+}
+
+# Appliquer avec :
+# terraform init
+# terraform plan
+# terraform apply
+```
+
+#### 2.0.5 Vérification des prérequis
+
+**Sur chaque nœud, vérifier :**
+
+```bash
+# 1. Connectivité réseau
+ping -c 3 master1
+ping -c 3 master2
+ping -c 3 worker1
+
+# 2. Résolution DNS
+nslookup master1
+nslookup worker1
+
+# 3. Ports ouverts (depuis un autre nœud)
+nc -zv master1 6443
+nc -zv master1 2379
+
+# 4. Ressources système
+free -h  # Minimum 2 Go RAM
+nproc    # Minimum 2 CPU
+df -h    # Minimum 20 Go disque
+
+# 5. Swap désactivé
+swapon --show  # Doit être vide
+
+# 6. Modules kernel
+lsmod | grep br_netfilter
+lsmod | grep overlay
+```
+
+#### 2.0.6 Script de préparation automatisé
+
+**Créer un script pour automatiser la préparation :**
+
+```bash
+#!/bin/bash
+# prepare-node.sh - À exécuter sur chaque nœud
+
+# Variables
+NODE_TYPE=$1  # master ou worker
+NODE_NUMBER=$2
+NODE_IP="192.168.1.$([[ $NODE_TYPE == 'master' ]] && echo $((10 + NODE_NUMBER)) || echo $((20 + NODE_NUMBER)))"
+HOSTNAME="${NODE_TYPE}${NODE_NUMBER}"
+
+# Vérifier les arguments
+if [ -z "$NODE_TYPE" ] || [ -z "$NODE_NUMBER" ]; then
+  echo "Usage: $0 <master|worker> <number>"
+  exit 1
+fi
+
+echo "=== Configuration de $HOSTNAME ($NODE_IP) ==="
+
+# Hostname
+sudo hostnamectl set-hostname $HOSTNAME
+
+# /etc/hosts
+cat <<EOF | sudo tee /etc/hosts
+127.0.0.1   localhost
+$NODE_IP    $HOSTNAME
+
+# Control Planes
+192.168.1.10 master1
+192.168.1.11 master2
+192.168.1.12 master3
+
+# Workers
+192.168.1.20 worker1
+192.168.1.21 worker2
+192.168.1.22 worker3
+
+# Load Balancer
+192.168.1.100 lb k8s-api
+EOF
+
+# Désactiver swap
+sudo swapoff -a
+sudo sed -i '/ swap / s/^/#/' /etc/fstab
+
+# Désactiver SELinux (RHEL/CentOS/AlmaLinux)
+if [ -f /etc/selinux/config ]; then
+  sudo setenforce 0
+  sudo sed -i 's/^SELINUX=enforcing/SELINUX=permissive/' /etc/selinux/config
+fi
+
+# Désactiver firewall (pour le lab)
+sudo systemctl stop firewalld 2>/dev/null
+sudo systemctl disable firewalld 2>/dev/null
+
+echo "✓ Node $HOSTNAME configuré"
+echo "✓ Prêt pour l'installation de Kubernetes"
+```
+
+**Utilisation :**
+```bash
+# Sur master1
+./prepare-node.sh master 1
+
+# Sur master2
+./prepare-node.sh master 2
+
+# Sur worker1
+./prepare-node.sh worker 1
+
+# Etc.
+```
+
 ### 2.1 Préparation des nœuds
 
 **Sur TOUS les nœuds (control plane et workers) :**
@@ -299,12 +695,213 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
 ### 2.5 Ajouter les Worker Nodes
 
-**Sur chaque worker node :**
+#### 2.5.1 Comprendre le processus de join
+
+Quand un worker rejoint le cluster :
+1. Il contacte l'API server via le load balancer (ou l'IP du master)
+2. Il vérifie le certificat CA avec le hash fourni
+3. Il s'authentifie avec le token
+4. Le control plane crée le nœud dans le cluster
+5. kubelet démarre et commence à gérer les pods
+
+#### 2.5.2 Obtenir la commande de join
+
+**Sur un control plane (master1) :**
 
 ```bash
-# Utiliser la commande de join pour workers
-sudo kubeadm join 192.168.1.100:6443 --token abcdef.0123456789abcdef \
-    --discovery-token-ca-cert-hash sha256:xxxx
+# Si vous avez perdu la commande de join originale
+kubeadm token create --print-join-command
+
+# Sortie exemple :
+# kubeadm join 192.168.1.100:6443 --token abc123.xyz789 \
+#   --discovery-token-ca-cert-hash sha256:1234567890abcdef...
+```
+
+**Décomposition de la commande :**
+- `192.168.1.100:6443` : Endpoint de l'API server (load balancer ou master)
+- `--token abc123.xyz789` : Token d'authentification (expire après 24h)
+- `--discovery-token-ca-cert-hash sha256:xxxx` : Hash du certificat CA pour sécurité
+
+#### 2.5.3 Ajouter worker1
+
+**Sur worker1 (192.168.1.20) :**
+
+```bash
+# Vérifier que worker1 est prêt
+echo "=== Vérification des prérequis ==="
+hostname  # Doit afficher: worker1
+ping -c 2 192.168.1.100  # Ping vers le load balancer
+ping -c 2 master1
+systemctl status kubelet  # Doit être actif
+
+# Rejoindre le cluster
+echo "=== Rattachement au cluster ==="
+sudo kubeadm join 192.168.1.100:6443 \
+  --token abc123.xyz789 \
+  --discovery-token-ca-cert-hash sha256:1234567890abcdef...
+
+# Sortie attendue :
+# [preflight] Running pre-flight checks
+# [kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
+# [kubelet-start] Starting the kubelet
+# [kubelet-start] Waiting for the kubelet to perform the TLS Bootstrap...
+#
+# This node has joined the cluster:
+# * Certificate signing request was sent to apiserver and a response was received.
+# * The Kubelet was informed of the new secure connection details.
+#
+# Run 'kubectl get nodes' on the control-plane to see this node join the cluster.
+```
+
+**Vérifier depuis master1 :**
+
+```bash
+# Sur master1
+kubectl get nodes
+
+# Sortie :
+# NAME      STATUS     ROLES           AGE   VERSION
+# master1   Ready      control-plane   15m   v1.28.0
+# master2   Ready      control-plane   10m   v1.28.0
+# master3   Ready      control-plane   8m    v1.28.0
+# worker1   NotReady   <none>          10s   v1.28.0  ← Nouveau nœud !
+
+# Attendre 30-60 secondes que le CNI configure le réseau
+sleep 60
+kubectl get nodes
+
+# Sortie :
+# worker1   Ready      <none>          1m    v1.28.0  ← Maintenant Ready !
+```
+
+#### 2.5.4 Ajouter les autres workers
+
+**Script pour automatiser l'ajout de plusieurs workers :**
+
+```bash
+#!/bin/bash
+# add-workers.sh - À exécuter depuis un control plane
+
+# Générer la commande de join
+JOIN_CMD=$(kubeadm token create --print-join-command)
+
+# Liste des workers à ajouter
+WORKERS=("worker1:192.168.1.20" "worker2:192.168.1.21" "worker3:192.168.1.22")
+
+for WORKER_INFO in "${WORKERS[@]}"; do
+  WORKER_NAME=$(echo $WORKER_INFO | cut -d: -f1)
+  WORKER_IP=$(echo $WORKER_INFO | cut -d: -f2)
+
+  echo "=== Ajout de $WORKER_NAME ($WORKER_IP) ==="
+
+  # Exécuter le join via SSH
+  ssh admin@$WORKER_IP "sudo $JOIN_CMD"
+
+  if [ $? -eq 0 ]; then
+    echo "✓ $WORKER_NAME ajouté avec succès"
+    sleep 10
+  else
+    echo "✗ Échec de l'ajout de $WORKER_NAME"
+  fi
+done
+
+# Vérifier tous les nœuds
+echo ""
+echo "=== État du cluster ==="
+kubectl get nodes
+```
+
+**Utilisation :**
+```bash
+chmod +x add-workers.sh
+./add-workers.sh
+```
+
+#### 2.5.5 Ajouter manuellement worker2 et worker3
+
+**Sur worker2 :**
+```bash
+ssh admin@192.168.1.21
+
+# Utiliser la même commande de join
+sudo kubeadm join 192.168.1.100:6443 \
+  --token abc123.xyz789 \
+  --discovery-token-ca-cert-hash sha256:1234567890abcdef...
+```
+
+**Sur worker3 :**
+```bash
+ssh admin@192.168.1.22
+
+sudo kubeadm join 192.168.1.100:6443 \
+  --token abc123.xyz789 \
+  --discovery-token-ca-cert-hash sha256:1234567890abcdef...
+```
+
+**Vérifier depuis master1 :**
+```bash
+watch kubectl get nodes
+# Attendre que tous les workers soient Ready
+```
+
+#### 2.5.6 Troubleshooting de l'ajout de workers
+
+**Problème 1 : Token expiré**
+```bash
+# Erreur :
+# error execution phase preflight: couldn't validate the identity of the API Server
+
+# Solution : Créer un nouveau token
+kubeadm token create --print-join-command
+```
+
+**Problème 2 : Worker reste en NotReady**
+```bash
+# Vérifier les pods CNI
+kubectl get pods -n kube-system | grep calico
+
+# Vérifier les logs du worker
+ssh worker1 "sudo journalctl -u kubelet -n 50"
+
+# Redémarrer kubelet si nécessaire
+ssh worker1 "sudo systemctl restart kubelet"
+```
+
+**Problème 3 : Impossible de contacter l'API server**
+```bash
+# Sur le worker
+ping 192.168.1.100
+nc -zv 192.168.1.100 6443
+
+# Vérifier le firewall
+sudo firewall-cmd --list-all
+```
+
+**Problème 4 : Certificat CA invalide**
+```bash
+# Récupérer le bon hash depuis un master
+openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | \
+  openssl rsa -pubin -outform der 2>/dev/null | \
+  openssl dgst -sha256 -hex | sed 's/^.* //'
+```
+
+#### 2.5.7 Labelliser les workers (optionnel)
+
+Après l'ajout, vous pouvez labelliser les workers :
+
+```bash
+# Ajouter le label "node" comme role
+kubectl label node worker1 node-role.kubernetes.io/worker=worker
+kubectl label node worker2 node-role.kubernetes.io/worker=worker
+kubectl label node worker3 node-role.kubernetes.io/worker=worker
+
+# Ajouter des labels personnalisés
+kubectl label node worker1 environment=production zone=zone-a
+kubectl label node worker2 environment=production zone=zone-b
+kubectl label node worker3 environment=production zone=zone-c
+
+# Vérifier
+kubectl get nodes --show-labels
 ```
 
 ### 2.6 Vérifier le cluster
