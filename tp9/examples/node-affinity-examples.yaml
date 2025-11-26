@@ -1,0 +1,186 @@
+# Exemples d'affinité de nœuds pour le TP9
+
+---
+# Exemple 1 : Affinité stricte (required) - Production seulement
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-production-only
+  labels:
+    env: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: webapp
+      env: production
+  template:
+    metadata:
+      labels:
+        app: webapp
+        env: production
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: environment
+                operator: In
+                values:
+                - production
+      containers:
+      - name: webapp
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+---
+# Exemple 2 : Affinité préférée (preferred) - Préfère SSD
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-prefer-ssd
+  labels:
+    storage: fast
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: database-cache
+  template:
+    metadata:
+      labels:
+        app: database-cache
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: disktype
+                operator: In
+                values:
+                - ssd
+          - weight: 50
+            preference:
+              matchExpressions:
+              - key: zone
+                operator: In
+                values:
+                - zone-a
+      containers:
+      - name: redis
+        image: redis:alpine
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+
+---
+# Exemple 3 : Combinaison required + preferred
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-complex-affinity
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: critical-app
+  template:
+    metadata:
+      labels:
+        app: critical-app
+    spec:
+      affinity:
+        nodeAffinity:
+          # Requis : Doit être en production
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: environment
+                operator: In
+                values:
+                - production
+          # Préféré : Sur SSD et en zone-a si possible
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 80
+            preference:
+              matchExpressions:
+              - key: disktype
+                operator: In
+                values:
+                - ssd
+          - weight: 60
+            preference:
+              matchExpressions:
+              - key: zone
+                operator: In
+                values:
+                - zone-a
+          - weight: 40
+            preference:
+              matchExpressions:
+              - key: cpu
+                operator: In
+                values:
+                - high-performance
+      containers:
+      - name: app
+        image: myapp:latest
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1"
+
+---
+# Exemple 4 : Opérateurs multiples
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-multiple-operators
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: monitoring
+  template:
+    metadata:
+      labels:
+        app: monitoring
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              # Ne doit PAS être en development
+              - key: environment
+                operator: NotIn
+                values:
+                - development
+              # Doit avoir le label "monitoring=enabled"
+              - key: monitoring
+                operator: Exists
+              # CPU doit être >= 4 (si label numérique existe)
+              - key: cpu-cores
+                operator: Gt
+                values:
+                - "3"
+      containers:
+      - name: prometheus
+        image: prom/prometheus:latest
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1"
