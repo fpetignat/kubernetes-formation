@@ -1,0 +1,11 @@
+# Exemple : ExternalName Service
+# Utilisation : kubectl apply -f 04-externalname-service.yaml
+# Test : kubectl run tmp --image=busybox --rm -it -- nslookup external-db
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: external-db
+spec:
+  type: ExternalName
+  externalName: database.example.com
