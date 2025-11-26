@@ -1,0 +1,440 @@
+# Exercice 1 : Déploiement Haute Disponibilité 3-tiers
+# Objectif : Déployer une application complète avec stratégies HA
+
+# Instructions :
+# 1. Labelliser vos nœuds :
+#    kubectl label nodes worker1 tier=frontend zone=zone-a
+#    kubectl label nodes worker2 tier=backend zone=zone-b
+#    kubectl label nodes worker3 tier=database zone=zone-c disktype=ssd
+#
+# 2. Appliquer ce fichier : kubectl apply -f exercice1-ha-deployment.yaml
+#
+# 3. Vérifier la distribution : kubectl get pods -o wide
+#
+# 4. Tester la résilience :
+#    kubectl drain worker1 --ignore-daemonsets --delete-emptydir-data
+#    kubectl get pods -o wide
+#
+# 5. Vérifier que l'application reste disponible
+#
+# 6. Réactiver : kubectl uncordon worker1
+
+---
+# Namespace pour l'exercice
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ha-exercise
+
+---
+# Base de données (PostgreSQL) - Haute disponibilité stricte
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: ha-exercise
+  labels:
+    app: myapp
+    tier: database
+spec:
+  serviceName: postgres
+  replicas: 3
+  selector:
+    matchLabels:
+      app: myapp
+      tier: database
+  template:
+    metadata:
+      labels:
+        app: myapp
+        tier: database
+    spec:
+      affinity:
+        # Nœuds avec SSD requis
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: disktype
+                operator: In
+                values:
+                - ssd
+        # Chaque réplica sur un nœud différent
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - myapp
+              - key: tier
+                operator: In
+                values:
+                - database
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRES_PASSWORD
+          value: "exercice-password"
+        - name: POSTGRES_DB
+          value: "myappdb"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - postgres
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - postgres
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# Service pour la base de données
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: ha-exercise
+spec:
+  selector:
+    app: myapp
+    tier: database
+  ports:
+  - port: 5432
+    targetPort: 5432
+  clusterIP: None  # Headless service pour StatefulSet
+
+---
+# PodDisruptionBudget pour la base de données
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: postgres-pdb
+  namespace: ha-exercise
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: myapp
+      tier: database
+
+---
+# Backend API - Proche de la DB
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: ha-exercise
+  labels:
+    app: myapp
+    tier: backend
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: myapp
+      tier: backend
+  template:
+    metadata:
+      labels:
+        app: myapp
+        tier: backend
+    spec:
+      affinity:
+        # Préfère être proche de la DB
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: tier
+                  operator: In
+                  values:
+                  - database
+              topologyKey: kubernetes.io/hostname
+        # Répartir les backends
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 80
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: tier
+                  operator: In
+                  values:
+                  - backend
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: backend
+        image: nginx:alpine  # Remplacer par votre image backend
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: DATABASE_HOST
+          value: "postgres.ha-exercise.svc.cluster.local"
+        - name: DATABASE_PORT
+          value: "5432"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "400m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 3
+
+---
+# Service pour le backend
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: ha-exercise
+spec:
+  selector:
+    app: myapp
+    tier: backend
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
+
+---
+# PodDisruptionBudget pour le backend
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend-pdb
+  namespace: ha-exercise
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app: myapp
+      tier: backend
+
+---
+# Frontend - Réparti sur les nœuds
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: ha-exercise
+  labels:
+    app: myapp
+    tier: frontend
+spec:
+  replicas: 8
+  selector:
+    matchLabels:
+      app: myapp
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        app: myapp
+        tier: frontend
+    spec:
+      affinity:
+        # Préfère être proche du backend
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: tier
+                  operator: In
+                  values:
+                  - backend
+              topologyKey: kubernetes.io/hostname
+        # Répartir les frontends (soft)
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: tier
+                  operator: In
+                  values:
+                  - frontend
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: frontend
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+          name: http
+        env:
+        - name: BACKEND_URL
+          value: "http://backend.ha-exercise.svc.cluster.local:8080"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 3
+
+---
+# Service pour le frontend
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: ha-exercise
+spec:
+  selector:
+    app: myapp
+    tier: frontend
+  ports:
+  - port: 80
+    targetPort: 80
+  type: NodePort
+
+---
+# PodDisruptionBudget pour le frontend
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend-pdb
+  namespace: ha-exercise
+spec:
+  minAvailable: 5
+  selector:
+    matchLabels:
+      app: myapp
+      tier: frontend
+
+---
+# Redis Cache - Pour améliorer les performances
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-cache
+  namespace: ha-exercise
+  labels:
+    app: myapp
+    component: cache
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: myapp
+      component: cache
+  template:
+    metadata:
+      labels:
+        app: myapp
+        component: cache
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                  - cache
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: redis
+        image: redis:alpine
+        ports:
+        - containerPort: 6379
+          name: redis
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "400m"
+
+---
+# Service pour Redis
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cache
+  namespace: ha-exercise
+spec:
+  selector:
+    app: myapp
+    component: cache
+  ports:
+  - port: 6379
+    targetPort: 6379
+
+---
+# PDB pour Redis
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redis-pdb
+  namespace: ha-exercise
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: myapp
+      component: cache
+
+# Vérification :
+# kubectl get all -n ha-exercise
+# kubectl get pods -n ha-exercise -o wide
+# kubectl get pdb -n ha-exercise
+#
+# Test de résilience :
+# kubectl drain <node-name> --ignore-daemonsets --delete-emptydir-data
+# kubectl get pods -n ha-exercise -o wide  # Vérifier la distribution
+# kubectl uncordon <node-name>

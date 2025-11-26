@@ -57,6 +57,10 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 
   Maîtrise approfondie du réseau Kubernetes, Services, DNS et NetworkPolicies
 
+- **[TP9 - Gestion Multi-Noeud de Kubernetes](tp9/README.md)**
+
+  Architecture et gestion de clusters multi-noeuds, haute disponibilité, maintenance et stratégies de planification
+
 ### Préparation Certification CKAD
 
 - **[🎓 CKAD Preparation - Exercices et Examens Blancs](ckad-preparation/README.md)**
@@ -221,6 +225,27 @@ Maîtrisez en profondeur le réseau Kubernetes avec une approche pratique et pro
 **Durée estimée :** 6-8 heures
 **Niveau :** Intermédiaire à Avancé
 
+### TP9 - Gestion Multi-Noeud de Kubernetes
+
+📁 **[Accéder au TP9](tp9/README.md)**
+
+Maîtrisez la gestion de clusters Kubernetes multi-noeuds pour la production. Ce TP couvre :
+- Architecture d'un cluster multi-noeud (control planes, workers, etcd)
+- Installation avec kubeadm et configuration HA
+- Gestion du cycle de vie des nœuds (ajout, suppression, maintenance)
+- Opérations de maintenance : cordon, drain, uncordon
+- Haute disponibilité du control plane et load balancing
+- Labels, selectors et NodeSelectors pour la planification
+- Taints et Tolerations pour l'isolation des workloads
+- Affinité et anti-affinité de nœuds et de pods
+- PodDisruptionBudgets pour la disponibilité
+- Upgrade de clusters et gestion des versions
+- Monitoring, troubleshooting et résolution de problèmes
+- Sauvegardes et restauration d'etcd
+
+**Durée estimée :** 8-10 heures
+**Niveau :** Avancé
+
 ---
 
 ## Installation rapide
@@ -267,6 +292,10 @@ kubernetes-formation/
 │   └── backend/              # Fichiers backend
 ├── tp8/                       # TP8 - Réseau Kubernetes
 │   └── README.md             # Guide complet du TP8
+├── tp9/                       # TP9 - Gestion Multi-Noeud
+│   ├── README.md             # Guide complet du TP9
+│   ├── examples/             # Exemples de manifests (affinités, taints, PDB)
+│   └── exercices/            # Exercices pratiques
 ├── ckad-preparation/          # 🎓 Préparation Certification CKAD
 │   ├── README.md             # Guide principal CKAD
 │   ├── cheatsheet.md         # Commandes essentielles
@@ -421,6 +450,7 @@ kubectl get events
 6. **TP6** : Mise en production et CI/CD ✅
 7. **TP7** : Migration Docker Compose vers Kubernetes ✅
 8. **TP8** : Réseau Kubernetes : Services, DNS et Connectivité ✅
+9. **TP9** : Gestion Multi-Noeud de Kubernetes ✅
 
 ## Workflow avec Claude
 
