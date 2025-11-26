@@ -53,6 +53,10 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 
   Migration d'applications existantes, conversion avec Kompose et bonnes pratiques
 
+- **[TP8 - Réseau Kubernetes : Services, DNS et Connectivité](tp8/README.md)**
+
+  Maîtrise approfondie du réseau Kubernetes, Services, DNS et NetworkPolicies
+
 ### Préparation Certification CKAD
 
 - **[🎓 CKAD Preparation - Exercices et Examens Blancs](ckad-preparation/README.md)**
@@ -199,6 +203,24 @@ Apprenez à migrer vos applications Docker Compose existantes vers Kubernetes. C
 **Durée estimée :** 4-5 heures
 **Niveau :** Intermédiaire
 
+### TP8 - Réseau Kubernetes : Services, DNS et Connectivité
+
+📁 **[Accéder au TP8](tp8/README.md)**
+
+Maîtrisez en profondeur le réseau Kubernetes avec une approche pratique et progressive. Ce TP couvre :
+- Modèle réseau Kubernetes et Container Network Interface (CNI)
+- Services : ClusterIP, NodePort, LoadBalancer, ExternalName, Headless
+- DNS Kubernetes et service discovery (CoreDNS)
+- Endpoints et EndpointSlices
+- NetworkPolicies pour la sécurité réseau (ingress, egress)
+- Session affinity et load balancing
+- Débogage réseau avec outils appropriés (tcpdump, netshoot)
+- Architectures réseau multi-tiers et multi-tenancy
+- Cas pratiques et exercices progressifs
+
+**Durée estimée :** 6-8 heures
+**Niveau :** Intermédiaire à Avancé
+
 ---
 
 ## Installation rapide
@@ -243,6 +265,8 @@ kubernetes-formation/
 │   ├── kubernetes-manifests/ # Manifests Kubernetes correspondants
 │   ├── frontend/             # Fichiers frontend
 │   └── backend/              # Fichiers backend
+├── tp8/                       # TP8 - Réseau Kubernetes
+│   └── README.md             # Guide complet du TP8
 ├── ckad-preparation/          # 🎓 Préparation Certification CKAD
 │   ├── README.md             # Guide principal CKAD
 │   ├── cheatsheet.md         # Commandes essentielles
@@ -396,6 +420,7 @@ kubectl get events
 5. **TP5** : Sécurité et RBAC ✅
 6. **TP6** : Mise en production et CI/CD ✅
 7. **TP7** : Migration Docker Compose vers Kubernetes ✅
+8. **TP8** : Réseau Kubernetes : Services, DNS et Connectivité ✅
 
 ## Workflow avec Claude
 
