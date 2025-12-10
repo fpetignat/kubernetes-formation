@@ -1,5 +1,7 @@
 # TP1 - Premier déploiement Kubernetes sur AlmaLinux
 
+> **💻 Utilisateurs Windows :** Consultez le [guide spécifique Windows (WINDOWS.md)](WINDOWS.md) qui adapte ce TP pour Windows avec Minikube ou WSL2. Voir aussi le [guide d'installation Windows complet](../docs/WINDOWS_SETUP.md).
+
 ## Objectifs du TP
 
 À la fin de ce TP, vous serez capable de :
@@ -12,14 +14,14 @@
 ## Prérequis
 
 ### Pour minikube (développement local)
-- Une machine AlmaLinux (physique ou virtuelle)
-- 2 CPU minimum
-- 2 Go de RAM minimum
+- Une machine AlmaLinux (physique ou virtuelle) **ou Windows** ([voir guide Windows](WINDOWS.md))
+- 2 CPU minimum (4 CPU recommandé pour Windows)
+- 2 Go de RAM minimum (4 Go recommandé pour Windows)
 - 20 Go d'espace disque
-- Accès root ou sudo
+- Accès root ou sudo (ou droits administrateur sur Windows)
 
 ### Pour kubeadm (environnement multi-nœuds)
-- 2-3 machines AlmaLinux (1 master + 1-2 workers)
+- 2-3 machines AlmaLinux (1 master + 1-2 workers) **ou WSL2 sur Windows**
 - **Master :** 2 CPU, 2 Go RAM, 20 Go disque
 - **Workers :** 1 CPU, 1 Go RAM, 20 Go disque
 - Réseau entre les machines
