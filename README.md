@@ -10,16 +10,25 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 
 **Type:** Formation pratique
 
-**Environnement:** AlmaLinux avec minikube
+**Environnement:** AlmaLinux avec minikube (ou Windows avec Minikube/WSL2)
 
 ## Prérequis
 
+### Pour Linux (AlmaLinux recommandé)
 - Machine Linux (AlmaLinux recommandé) ou machine virtuelle
 - 2 CPU minimum
 - 2 Go de RAM minimum
 - 20 Go d'espace disque
 - Accès root ou sudo
 - Connexion Internet pour télécharger les outils et images
+
+### Pour Windows
+- **[📘 Guide d'installation Kubernetes sur Windows](docs/WINDOWS_SETUP.md)** - Instructions complètes pour Minikube et kubeadm sur Windows
+- Windows 10/11 avec support de virtualisation
+- 4 Go de RAM minimum (8 Go recommandé)
+- 20 Go d'espace disque
+- Docker Desktop, Hyper-V, ou WSL2
+- Droits administrateur
 
 ## Table des matières
 
@@ -77,7 +86,9 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 - [Installation rapide](#installation-rapide)
 - [Structure du projet](#structure-du-projet)
 - [Commandes kubectl essentielles](#commandes-kubectl-essentielles)
+- **[💻 Guide d'installation Windows](docs/WINDOWS_SETUP.md)** - Installation complète de Kubernetes sur Windows (Minikube, kubeadm, WSL2)
 - **[📘 Guide Jobs et CronJobs](docs/JOBS_CRONJOBS.md)** - Guide complet sur les tâches batch et planifiées
+- **[🔧 Guide kubeadm Setup](docs/KUBEADM_SETUP.md)** - Installation d'un cluster multi-nœuds avec kubeadm
 - [Ressources complémentaires](#ressources-complémentaires)
 - [Workflow avec Claude](#workflow-avec-claude)
 
