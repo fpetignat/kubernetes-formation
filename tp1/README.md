@@ -648,10 +648,27 @@ kubectl get deployments,services,pods
 
 ### 7.4 Tester l'application
 
+#### Option A : Avec minikube
+
 ```bash
 # Accéder au service
 curl http://$(minikube ip):30080
 ```
+
+#### Option B : Avec kubeadm
+
+```bash
+# Récupérer l'IP d'un nœud
+export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+
+# Tester l'accès
+curl http://$NODE_IP:30080
+
+# Ou depuis un autre serveur sur le réseau
+# curl http://<IP-du-noeud>:30080
+```
+
+**Note :** Avec kubeadm, le service est accessible sur le port 30080 depuis n'importe quel nœud du cluster grâce à kube-proxy.
 
 ## Partie 8 : Nettoyage et commandes utiles
 
