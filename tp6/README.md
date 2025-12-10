@@ -16,9 +16,11 @@
 ## Prérequis
 
 - Avoir complété les TP1 à TP5
-- Un cluster minikube fonctionnel
+- Un cluster Kubernetes fonctionnel (**minikube** ou **kubeadm**)
 - Connaissance des concepts de base de Kubernetes
 - Compte GitHub (pour le CI/CD) **OU** voir l'alternative Tekton ci-dessous
+
+**Note pour kubeadm :** Les outils CI/CD (Tekton, ArgoCD) fonctionnent de manière identique. Pour les registry d'images, référez-vous au [guide kubeadm](../docs/KUBEADM_SETUP.md) pour configurer un registry Docker interne.
 - Compréhension de Docker et des conteneurs
 
 > **Note importante** : Si vous ne souhaitez pas créer de compte GitHub, consultez le fichier [ALTERNATIVE_SANS_GITHUB.md](./ALTERNATIVE_SANS_GITHUB.md) qui explique comment mettre en place un pipeline CI/CD complet avec **Tekton**, directement dans votre cluster Kubernetes, sans aucun service externe.

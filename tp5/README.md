@@ -15,9 +15,11 @@
 ## Prérequis
 
 - Avoir complété les TP1, TP2, TP3 et TP4
-- Un cluster minikube fonctionnel
+- Un cluster Kubernetes fonctionnel (**minikube** ou **kubeadm**)
 - Connaissance des Pods, Deployments et Services
 - Compréhension des concepts de réseau de base
+
+**Note pour kubeadm :** Les concepts de sécurité (RBAC, Network Policies, SecurityContext) sont identiques. Les Network Policies nécessitent un CNI qui les supporte (Calico recommandé, déjà configuré si vous avez suivi le [guide kubeadm](../docs/KUBEADM_SETUP.md)).
 
 ## Partie 1 : Introduction à la sécurité Kubernetes
 

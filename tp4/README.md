@@ -15,9 +15,11 @@
 ## Prérequis
 
 - Avoir complété les TP1, TP2 et TP3
-- Un cluster minikube fonctionnel
+- Un cluster Kubernetes fonctionnel (**minikube** ou **kubeadm**)
 - 4 Go de RAM minimum (pour Prometheus et Grafana)
 - Connaissance des Deployments et Services
+
+**Note pour kubeadm :** Les outils de monitoring (Metrics Server, Dashboard, Prometheus) s'installent de la même manière. Consultez le [guide kubeadm - Partie 11](../docs/KUBEADM_SETUP.md#partie-11--addons-et-fonctionnalités-complémentaires) pour les équivalences des addons minikube.
 
 ## Partie 1 : Introduction à l'observabilité
 

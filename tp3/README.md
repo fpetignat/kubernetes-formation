@@ -13,8 +13,10 @@
 ## Prérequis
 
 - Avoir complété le TP1 et TP2
-- Un cluster minikube fonctionnel
+- Un cluster Kubernetes fonctionnel (**minikube** ou **kubeadm**)
 - Connaissance de base des manifests YAML
+
+**Note :** Les concepts de persistance (PV, PVC, StorageClass) sont identiques pour minikube et kubeadm. Les différences se situent principalement au niveau des provisioners de stockage disponibles.
 
 ## Partie 1 : Introduction aux volumes Kubernetes
 
@@ -188,10 +190,26 @@ spec:
 
 **Exercice 2 : Créer un PV**
 
+**Avec minikube :**
 ```bash
 # Créer le répertoire sur le nœud minikube
 minikube ssh "sudo mkdir -p /mnt/data"
+```
 
+**Avec kubeadm :**
+```bash
+# Créer le répertoire sur chaque worker (adapter le nom d'utilisateur et l'IP)
+ssh user@worker-node-1 "sudo mkdir -p /mnt/data"
+ssh user@worker-node-2 "sudo mkdir -p /mnt/data"
+
+# Ou sur tous les nœuds si vous autorisez le scheduling sur le master
+for node in master-node worker-node-1 worker-node-2; do
+  ssh user@$node "sudo mkdir -p /mnt/data"
+done
+```
+
+**Création du PV (identique pour minikube et kubeadm) :**
+```bash
 # Créer le PV
 kubectl apply -f 03-persistent-volume.yaml
 
@@ -316,7 +334,7 @@ Une StorageClass permet de définir différentes classes de stockage avec provis
 - Provisionnement à la demande
 - Différentes classes pour différents besoins (SSD, HDD, etc.)
 
-### 3.2 StorageClass par défaut de minikube
+### 3.2 StorageClass par défaut
 
 ```bash
 # Lister les StorageClasses disponibles
@@ -326,11 +344,29 @@ kubectl get storageclass
 kubectl describe storageclass standard
 ```
 
-Minikube fournit une StorageClass `standard` utilisant le provisioner `k8s.io/minikube-hostpath`.
+**Avec minikube :** La StorageClass `standard` utilise le provisioner `k8s.io/minikube-hostpath`.
+
+**Avec kubeadm :** La StorageClass par défaut dépend de votre installation. Avec l'installation de base kubeadm, **aucune StorageClass** n'est créée par défaut. Vous devez :
+- Soit installer un provisioner comme [local-path-provisioner](https://github.com/rancher/local-path-provisioner)
+- Soit utiliser un provisioner cloud si vous êtes sur un cloud provider
+- Soit créer manuellement les PV (provisionnement statique)
+
+**Installation de local-path-provisioner pour kubeadm :**
+```bash
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.26/deploy/local-path-storage.yaml
+
+# Définir comme StorageClass par défaut
+kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+
+# Vérifier
+kubectl get storageclass
+```
 
 ### 3.3 Créer une StorageClass personnalisée
 
-Créer `06-storage-class.yaml` :
+**Pour minikube :**
+
+Créer `06-storage-class-minikube.yaml` :
 
 ```yaml
 apiVersion: storage.k8s.io/v1
@@ -345,9 +381,26 @@ volumeBindingMode: Immediate
 allowVolumeExpansion: true
 ```
 
+**Pour kubeadm (avec local-path-provisioner) :**
+
+Créer `06-storage-class-kubeadm.yaml` :
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-storage
+provisioner: rancher.io/local-path
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+```
+
 ```bash
-# Créer la StorageClass
-kubectl apply -f 06-storage-class.yaml
+# Créer la StorageClass (adapter le nom du fichier selon votre environnement)
+kubectl apply -f 06-storage-class-minikube.yaml  # Pour minikube
+# OU
+kubectl apply -f 06-storage-class-kubeadm.yaml   # Pour kubeadm
 
 # Vérifier
 kubectl get storageclass
@@ -779,9 +832,9 @@ kubectl delete pod test-expansion
 - L'expansion n'est jamais possible en réduction (shrink), seulement en augmentation
 - Le provisioner `k8s.io/minikube-hostpath` supporte l'expansion mais nécessite un redémarrage
 
-### 5.2 Installation du driver CSI pour minikube
+### 5.2 Installation du driver CSI
 
-Pour utiliser des fonctionnalités avancées comme les snapshots de volumes, il est nécessaire d'installer le driver CSI (Container Storage Interface) sur minikube.
+Pour utiliser des fonctionnalités avancées comme les snapshots de volumes, il est nécessaire d'installer le driver CSI (Container Storage Interface).
 
 **Pourquoi installer le CSI driver ?**
 
@@ -791,7 +844,7 @@ Le driver CSI `csi-hostpath-driver` permet :
 - Le clonage de volumes
 - Une gestion plus avancée du stockage
 
-**Installation de l'addon**
+#### Option A : Avec minikube
 
 ```bash
 # Activer l'addon csi-hostpath-driver sur minikube
@@ -802,6 +855,42 @@ minikube addons list | grep csi-hostpath-driver
 
 # Attendre que les pods CSI soient prêts
 kubectl wait --for=condition=ready pod -n kube-system -l app=csi-hostpath-driver --timeout=120s
+```
+
+#### Option B : Avec kubeadm
+
+**Installation manuelle du csi-hostpath-driver :**
+
+```bash
+# Cloner le repo du driver CSI hostpath
+git clone https://github.com/kubernetes-csi/csi-driver-host-path.git
+cd csi-driver-host-path
+
+# Déployer le driver
+./deploy/kubernetes-latest/deploy.sh
+
+# Vérifier le déploiement
+kubectl get pods -n default | grep csi
+
+# Attendre que les pods soient prêts
+kubectl wait --for=condition=ready pod -l app=csi-hostpathplugin --timeout=120s
+```
+
+**Alternative : Utiliser le manifest direct :**
+
+```bash
+# Installer les CRDs pour les snapshots
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
+
+# Installer le snapshot controller
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/deploy/kubernetes/snapshot-controller/rbac-snapshot-controller.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml
+
+# Installer le driver hostpath
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/csi-driver-host-path/master/deploy/kubernetes-latest/hostpath/csi-hostpath-driverinfo.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/csi-driver-host-path/master/deploy/kubernetes-latest/hostpath/csi-hostpath-plugin.yaml
 ```
 
 **Vérification de l'installation**

@@ -1,21 +1,53 @@
-# TP1 - Premier déploiement Kubernetes sur AlmaLinux avec Minikube
+# TP1 - Premier déploiement Kubernetes sur AlmaLinux
 
 ## Objectifs du TP
 
 À la fin de ce TP, vous serez capable de :
-- Installer et configurer minikube sur AlmaLinux
-- Démarrer un cluster Kubernetes local
+- Installer et configurer un cluster Kubernetes (minikube ou kubeadm)
+- Démarrer un cluster Kubernetes
 - Déployer votre première application
 - Exposer l'application via un service
 - Interagir avec les pods et services
 
 ## Prérequis
 
+### Pour minikube (développement local)
 - Une machine AlmaLinux (physique ou virtuelle)
 - 2 CPU minimum
 - 2 Go de RAM minimum
 - 20 Go d'espace disque
 - Accès root ou sudo
+
+### Pour kubeadm (environnement multi-nœuds)
+- 2-3 machines AlmaLinux (1 master + 1-2 workers)
+- **Master :** 2 CPU, 2 Go RAM, 20 Go disque
+- **Workers :** 1 CPU, 1 Go RAM, 20 Go disque
+- Réseau entre les machines
+- Accès root ou sudo
+
+## Choix de votre environnement
+
+Ce TP peut être réalisé avec **deux approches différentes** :
+
+### Option A : minikube (recommandé pour débuter)
+- ✅ Installation rapide et simple
+- ✅ Idéal pour le développement local
+- ✅ Nécessite une seule machine
+- ✅ Gestion automatique du réseau
+- ❌ Ne reflète pas un environnement de production
+- ❌ Limitations pour le multi-nœud
+
+### Option B : kubeadm (recommandé pour la production)
+- ✅ Architecture réaliste multi-nœuds
+- ✅ Proche d'un environnement de production
+- ✅ Contrôle total sur la configuration
+- ✅ Scalabilité native
+- ❌ Installation plus complexe
+- ❌ Nécessite plusieurs machines
+
+**💡 Conseil :** Commencez avec minikube pour apprendre les concepts, puis passez à kubeadm pour comprendre la production.
+
+---
 
 ## Partie 1 : Installation de l'environnement
 
@@ -64,7 +96,9 @@ sudo mv kubectl /usr/local/bin/
 kubectl version --client
 ```
 
-### 1.4 Installation de minikube
+### 1.4 Installation de minikube (Option A)
+
+**Si vous choisissez minikube :**
 
 ```bash
 # Télécharger minikube
@@ -77,9 +111,103 @@ sudo install minikube-linux-amd64 /usr/local/bin/minikube
 minikube version
 ```
 
+### 1.5 Installation de kubeadm (Option B)
+
+**Si vous choisissez kubeadm :**
+
+Pour une installation complète avec kubeadm, consultez le **[Guide d'installation kubeadm](../docs/KUBEADM_SETUP.md)** qui couvre :
+- La préparation des nœuds (désactivation swap, modules kernel, etc.)
+- L'installation de containerd
+- L'installation de kubeadm, kubelet et kubectl
+- L'initialisation du cluster
+- L'ajout de workers
+- La configuration du réseau (CNI)
+
+**Installation rapide (résumé) :**
+
+```bash
+# Sur TOUS les nœuds (master et workers)
+
+# 1. Désactiver swap et SELinux
+sudo swapoff -a
+sudo sed -i '/ swap / s/^/#/' /etc/fstab
+sudo setenforce 0
+sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+
+# 2. Configurer les modules kernel
+cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+
+sudo modprobe overlay
+sudo modprobe br_netfilter
+
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
+EOF
+
+sudo sysctl --system
+
+# 3. Installer containerd
+sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+sudo dnf install -y containerd.io
+sudo mkdir -p /etc/containerd
+containerd config default | sudo tee /etc/containerd/config.toml
+sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+sudo systemctl restart containerd
+sudo systemctl enable containerd
+
+# 4. Installer kubeadm, kubelet et kubectl
+cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
+exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
+EOF
+
+sudo dnf install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+sudo systemctl enable --now kubelet
+```
+
+**Sur le nœud MASTER uniquement :**
+
+```bash
+# Initialiser le cluster
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16
+
+# Configurer kubectl
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+# Installer Flannel (CNI)
+kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+```
+
+**Sur chaque nœud WORKER :**
+
+```bash
+# Utiliser la commande 'kubeadm join' affichée après l'init sur le master
+# Exemple :
+# sudo kubeadm join <master-ip>:6443 --token <token> \
+#   --discovery-token-ca-cert-hash sha256:<hash>
+```
+
+**💡 Note :** Consultez le [guide complet kubeadm](../docs/KUBEADM_SETUP.md) pour plus de détails et le dépannage.
+
+---
+
 ## Partie 2 : Démarrage du cluster Kubernetes
 
-### 2.1 Démarrer minikube
+### 2.1 Option A : Démarrer minikube
+
+**Si vous utilisez minikube :**
 
 ```bash
 # Démarrer minikube avec Docker comme driver
@@ -99,7 +227,25 @@ apiserver: Running
 kubeconfig: Configured
 ```
 
+### 2.1 Option B : Vérifier le cluster kubeadm
+
+**Si vous utilisez kubeadm :**
+
+Après avoir suivi les étapes d'installation de la section 1.5, vérifiez que votre cluster est opérationnel :
+
+```bash
+# Vérifier que tous les pods système sont prêts
+kubectl get pods -n kube-system
+
+# Attendre que tous les pods soient Running
+kubectl wait --for=condition=ready pod --all -n kube-system --timeout=300s
+```
+
+**Résultat attendu :** Tous les pods (coredns, flannel, kube-proxy, etc.) doivent être en état `Running`.
+
 ### 2.2 Vérifier le cluster
+
+**Ces commandes fonctionnent pour minikube ET kubeadm :**
 
 ```bash
 # Afficher les informations du cluster
@@ -108,8 +254,22 @@ kubectl cluster-info
 # Lister les nœuds
 kubectl get nodes
 
-# Afficher plus de détails sur le nœud
-kubectl describe node minikube
+# Afficher plus de détails sur les nœuds
+kubectl describe nodes
+```
+
+**Avec minikube, vous verrez :**
+```
+NAME       STATUS   ROLES           AGE   VERSION
+minikube   Ready    control-plane   5m    v1.29.0
+```
+
+**Avec kubeadm (exemple 1 master + 2 workers), vous verrez :**
+```
+NAME              STATUS   ROLES           AGE   VERSION
+master-node       Ready    control-plane   10m   v1.29.0
+worker-node-1     Ready    <none>          5m    v1.29.0
+worker-node-2     Ready    <none>          4m    v1.29.0
 ```
 
 ## Partie 3 : Premier déploiement
@@ -338,6 +498,8 @@ kubectl get services
 
 ### 5.2 Accéder à l'application
 
+#### Option A : Avec minikube
+
 ```bash
 # Obtenir l'URL du service
 minikube service nginx-demo --url
@@ -355,6 +517,31 @@ export NODE_IP=$(minikube ip)
 # Tester l'accès
 curl http://$NODE_IP:$NODE_PORT
 ```
+
+#### Option B : Avec kubeadm
+
+Avec kubeadm, vous accédez au service via l'IP de n'importe quel nœud et le NodePort :
+
+```bash
+# Récupérer le NodePort assigné
+export NODE_PORT=$(kubectl get services nginx-demo -o jsonpath='{.spec.ports[0].nodePort}')
+
+# Récupérer l'IP d'un worker (ou du master si scheduling autorisé)
+export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+
+# Afficher l'URL
+echo "Service accessible à : http://$NODE_IP:$NODE_PORT"
+
+# Tester l'accès
+curl http://$NODE_IP:$NODE_PORT
+```
+
+**Note :** Avec kubeadm en multi-nœuds, le service est accessible via **n'importe quel nœud** du cluster grâce à kube-proxy, même si le pod n'est pas sur ce nœud.
+
+**Astuce :** Pour un accès plus simple en production, considérez :
+- **Ingress Controller** : Pour le routage HTTP/HTTPS (voir TPs suivants)
+- **MetalLB** : Pour des LoadBalancers avec IP externe (voir [guide kubeadm](../docs/KUBEADM_SETUP.md#partie-6--configuration-du-loadbalancer-metallb))
+- **HAProxy/Nginx externe** : Pour load balancer devant les NodePorts
 
 ## Partie 6 : Manipulation avancée
 
@@ -486,10 +673,22 @@ kubectl delete service webapp-service
 
 ### 8.2 Commandes utiles
 
+#### Communes (minikube et kubeadm)
+
 ```bash
 # Voir toutes les ressources dans le namespace par défaut
 kubectl get all
 
+# Voir les pods de tous les namespaces
+kubectl get pods --all-namespaces
+
+# Afficher les événements récents
+kubectl get events --sort-by='.lastTimestamp'
+```
+
+#### Spécifiques minikube
+
+```bash
 # Accéder au dashboard Kubernetes
 minikube dashboard
 
@@ -506,7 +705,32 @@ minikube logs
 minikube ssh
 ```
 
+#### Spécifiques kubeadm
+
+```bash
+# Installer le dashboard manuellement
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+
+# Créer un token pour accéder au dashboard
+kubectl -n kubernetes-dashboard create token admin-user
+
+# Accéder au dashboard via port-forward
+kubectl port-forward -n kubernetes-dashboard service/kubernetes-dashboard 8443:443
+
+# Installer metrics-server manuellement
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+
+# SSH dans un nœud spécifique (adapter l'IP)
+ssh user@<node-ip>
+
+# Voir les logs des composants système
+kubectl logs -n kube-system -l component=kube-apiserver
+kubectl logs -n kube-system -l k8s-app=kube-proxy
+```
+
 ### 8.3 Arrêter et supprimer le cluster
+
+#### Avec minikube
 
 ```bash
 # Arrêter minikube
@@ -517,6 +741,26 @@ minikube delete
 
 # Démarrer à nouveau
 minikube start
+```
+
+#### Avec kubeadm
+
+```bash
+# Pour arrêter le cluster, arrêter les VMs/serveurs ou :
+# Sur chaque nœud
+sudo systemctl stop kubelet
+
+# Pour redémarrer
+sudo systemctl start kubelet
+
+# Pour supprimer complètement le cluster
+# Sur tous les nœuds (master et workers)
+sudo kubeadm reset -f
+sudo rm -rf /etc/cni/net.d
+sudo rm -rf $HOME/.kube/config
+sudo iptables -F && sudo iptables -t nat -F && sudo iptables -t mangle -F && sudo iptables -X
+
+# Puis réinitialiser depuis le début si nécessaire (voir section 1.5)
 ```
 
 ## Exercices pratiques
@@ -530,12 +774,14 @@ minikube start
 
 ### Exercice 2 : Application multi-conteneurs
 1. Créer un déploiement avec 3 réplicas d'nginx
-2. Créer un service **LoadBalancer** (qui sera converti en NodePort par minikube)
+2. Créer un service **LoadBalancer**
 3. Tester l'accès à l'application
 4. Scaler à 5 réplicas
 5. Observer la distribution des pods
 
-**À propos de LoadBalancer :** Dans un environnement de production cloud (AWS, GCP, Azure), un service LoadBalancer créerait automatiquement un load balancer externe avec une IP publique. Cependant, puisque minikube est un cluster local, il convertit automatiquement ce type en NodePort. Pour simuler un vrai LoadBalancer localement, vous pouvez utiliser `minikube tunnel` dans un terminal séparé. Voir Partie 4.1 pour plus d'informations.
+**À propos de LoadBalancer :**
+- **Avec minikube :** Le type LoadBalancer est automatiquement converti en NodePort. Pour simuler un vrai LoadBalancer localement, vous pouvez utiliser `minikube tunnel` dans un terminal séparé.
+- **Avec kubeadm :** Installez MetalLB pour obtenir des IPs externes pour vos LoadBalancers (voir [guide kubeadm](../docs/KUBEADM_SETUP.md#partie-6--configuration-du-loadbalancer-metallb))
 
 ### Exercice 3 : Manipulation YAML
 1. Créer un fichier YAML pour déployer MySQL
