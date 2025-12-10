@@ -13,8 +13,10 @@
 ## Prérequis
 
 - Avoir complété le TP1
-- Un cluster minikube fonctionnel
+- Un cluster Kubernetes fonctionnel (**minikube** ou **kubeadm**)
 - Un éditeur de texte (vim, nano, VS Code, etc.)
+
+**Note :** Les manifests YAML sont identiques que vous utilisiez minikube ou kubeadm. Les différences se situent uniquement au niveau de l'accès aux services (voir TP1, Partie 5.2).
 
 ## Partie 1 : Anatomie d'un manifest Kubernetes
 
@@ -363,9 +365,19 @@ spec:
 1. Créez les trois types de services ci-dessus
 2. Vérifiez avec : `kubectl get services`
 3. Testez l'accès au service NodePort :
+
+   **Avec minikube :**
    ```bash
    curl http://$(minikube ip):30080
    ```
+
+   **Avec kubeadm :**
+   ```bash
+   # Récupérer l'IP d'un nœud
+   NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+   curl http://$NODE_IP:30080
+   ```
+
 4. Affichez les endpoints : `kubectl get endpoints`
 5. Décrivez le service : `kubectl describe service app-service`
 
@@ -750,7 +762,25 @@ kubectl apply -f wordpress-namespace.yaml
 kubectl apply -f wordpress-secret.yaml
 kubectl apply -f wordpress-mysql.yaml
 kubectl apply -f wordpress-app.yaml
+
+# Attendre que tout soit prêt
+kubectl wait --for=condition=ready pod -l app=mysql -n wordpress-app --timeout=120s
+kubectl wait --for=condition=ready pod -l app=wordpress -n wordpress-app --timeout=120s
+```
+
+**Accès à WordPress :**
+
+Avec minikube :
+```bash
 minikube service wordpress-service -n wordpress-app
+```
+
+Avec kubeadm :
+```bash
+# Récupérer le NodePort et l'IP d'un nœud
+NODE_PORT=$(kubectl get svc wordpress-service -n wordpress-app -o jsonpath='{.spec.ports[0].nodePort}')
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+echo "WordPress accessible à : http://$NODE_IP:$NODE_PORT"
 ```
 
 ### Exercice 11 : Application avec microservices
@@ -1139,7 +1169,7 @@ spec:
         resources:
           requests:
             memory: "1Gi"
-            cpu: "2000m"  # Bug 3: Ressources trop élevées pour minikube
+            cpu: "2000m"  # Bug 3: Ressources trop élevées (unrealistic)
           limits:
             memory: "512Mi"  # Bug 4: Limit < Request
             cpu: "1000m"
@@ -1338,7 +1368,13 @@ kubectl wait --for=condition=ready pod -l app=mysql -n wordpress-app --timeout=1
 kubectl wait --for=condition=ready pod -l app=wordpress -n wordpress-app --timeout=120s
 
 # Accéder à WordPress
+# Avec minikube :
 minikube service wordpress-service -n wordpress-app
+
+# Avec kubeadm :
+NODE_PORT=$(kubectl get svc wordpress-service -n wordpress-app -o jsonpath='{.spec.ports[0].nodePort}')
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+echo "http://$NODE_IP:$NODE_PORT"
 ```
 </details>
 

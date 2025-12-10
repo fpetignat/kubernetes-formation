@@ -15,7 +15,9 @@
 - Avoir complété le TP1 (Premier déploiement Kubernetes)
 - Avoir complété le TP2 (Maîtriser les Manifests Kubernetes)
 - Docker et Docker Compose installés
-- Minikube en cours d'exécution
+- Un cluster Kubernetes fonctionnel (**minikube** ou **kubeadm**)
+
+**Note pour kubeadm :** Cette application microservices fonctionne de manière identique sur kubeadm. Pour l'Ingress, consultez le [guide kubeadm - Partie 11.3](../docs/KUBEADM_SETUP.md#113-ingress-controller-nginx-ingress) pour installer nginx-ingress.
 - kubectl configuré
 - Connaissances de base en Docker Compose
 

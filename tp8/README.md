@@ -17,9 +17,11 @@ Ce TP vous permettra de maîtriser le réseau dans Kubernetes de manière approf
 ## Prérequis
 
 - Avoir complété le TP1 (bases Kubernetes) et TP2 (manifests)
-- Cluster Kubernetes fonctionnel (minikube ou autre)
+- Cluster Kubernetes fonctionnel (**minikube** ou **kubeadm**)
 - kubectl installé et configuré
 - Notions de réseau (IP, ports, DNS)
+
+**Note pour kubeadm :** Les concepts réseau (Services, Ingress, Network Policies) sont identiques. Pour l'Ingress Controller, consultez le [guide kubeadm](../docs/KUBEADM_SETUP.md#113-ingress-controller-nginx-ingress).
 
 ## Table des matières
 
