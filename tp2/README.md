@@ -503,6 +503,229 @@ spec:
    kubectl exec configured-app -- ls /etc/secret
    ```
 
+### 5.4 ⚠️ LIMITES DE SÉCURITÉ DES SECRETS KUBERNETES
+
+**IMPORTANT :** Les Secrets Kubernetes ne sont PAS une solution de sécurité robuste par défaut. Voici les limites critiques à connaître :
+
+#### 5.4.1 Encodage vs Chiffrement
+
+```bash
+# Les Secrets sont encodés en base64, PAS chiffrés
+echo "supersecret123" | base64
+# Résultat : c3VwZXJzZWNyZXQxMjM=
+
+# Ils peuvent être décodés facilement
+echo "c3VwZXJzZWNyZXQxMjM=" | base64 -d
+# Résultat : supersecret123
+```
+
+**⚠️ Risque :** N'importe qui ayant accès au manifest YAML peut décoder les secrets encodés en base64.
+
+#### 5.4.2 Stockage en clair dans etcd
+
+**Par défaut**, les Secrets sont stockés **en clair** dans etcd (la base de données de Kubernetes).
+
+```bash
+# Vérifier si l'encryption at rest est activée
+kubectl get secret app-secret -o yaml
+
+# Le champ 'data' contient les valeurs en base64 seulement
+```
+
+**⚠️ Risque :**
+- Toute personne ayant accès à etcd peut lire tous les secrets
+- Les backups etcd contiennent les secrets en clair
+- Un compromis du serveur etcd expose tous les secrets
+
+**Solution :** Activer l'[Encryption at Rest](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/) dans la configuration du cluster.
+
+#### 5.4.3 Accès via l'API Kubernetes
+
+```bash
+# Toute personne avec les permissions RBAC appropriées peut lire les secrets
+kubectl get secret app-secret -o yaml
+kubectl get secret app-secret -o jsonpath='{.data.password}' | base64 -d
+```
+
+**⚠️ Risque :**
+- Un compte de service compromis avec les bonnes permissions peut lire tous les secrets
+- Les permissions par défaut peuvent être trop permissives
+
+**Bonnes pratiques :**
+```yaml
+# Limiter l'accès aux secrets avec RBAC
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: secret-reader
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["app-secret"]  # Limiter à des secrets spécifiques
+  verbs: ["get"]
+```
+
+#### 5.4.4 Secrets montés comme volumes
+
+Quand un Secret est monté comme volume dans un Pod :
+
+```bash
+# Le secret est écrit en clair sur le disque du nœud
+kubectl exec configured-app -- cat /etc/secret/password
+# Affiche : supersecret123
+```
+
+**⚠️ Risques :**
+- Les fichiers sont visibles sur le système de fichiers du nœud (dans `/var/lib/kubelet/pods/...`)
+- Un accès SSH au nœud permet de lire les secrets
+- Les secrets restent sur le disque même après la suppression du Pod
+
+#### 5.4.5 Secrets dans les variables d'environnement
+
+```yaml
+env:
+- name: PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: app-secret
+      key: password
+```
+
+**⚠️ Risques CRITIQUES :**
+- Les variables d'environnement sont visibles dans `kubectl describe pod`
+- Elles apparaissent dans les logs système et d'audit
+- Les processus enfants héritent des variables d'environnement
+- Elles peuvent être loguées involontairement par l'application
+
+```bash
+# Les variables d'environnement sont visibles !
+kubectl exec configured-app -- env | grep PASSWORD
+# Affiche : PASSWORD=supersecret123
+
+# Elles apparaissent aussi dans describe
+kubectl describe pod configured-app
+# On peut voir les références aux secrets (mais pas les valeurs directement)
+```
+
+**Recommandation :** Préférer les volumes aux variables d'environnement pour les secrets sensibles.
+
+#### 5.4.6 Secrets dans Git
+
+**❌ JAMAIS faire cela :**
+```yaml
+# Ne JAMAIS commiter ce fichier dans Git !
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bad-secret
+stringData:
+  password: "supersecret123"  # Visible dans l'historique Git !
+```
+
+**⚠️ Risques :**
+- Une fois dans Git, le secret reste dans l'historique même si supprimé
+- Les forks et clones du dépôt contiennent le secret
+- Les outils d'analyse de code peuvent détecter et signaler les secrets
+
+**Bonnes pratiques :**
+```bash
+# Ajouter les fichiers de secrets au .gitignore
+echo "*-secret.yaml" >> .gitignore
+echo "secrets/" >> .gitignore
+```
+
+#### 5.4.7 Solutions alternatives plus sécurisées
+
+Pour une sécurité renforcée, considérez ces solutions :
+
+**1. Sealed Secrets (Bitnami)**
+```bash
+# Les secrets sont chiffrés et peuvent être stockés dans Git
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: mysecret
+spec:
+  encryptedData:
+    password: AgBpDH7X9k2... # Chiffré, safe pour Git
+```
+
+**2. External Secrets Operator**
+```yaml
+# Synchronise les secrets depuis un gestionnaire externe
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: app-secret
+spec:
+  secretStoreRef:
+    name: vault-backend
+  target:
+    name: app-secret
+  data:
+  - secretKey: password
+    remoteRef:
+      key: secret/data/myapp
+      property: password
+```
+
+**3. HashiCorp Vault**
+- Gestionnaire de secrets dédié
+- Chiffrement, rotation automatique, audit
+- Intégration avec Kubernetes via CSI driver
+
+**4. Cloud Provider Secret Managers**
+- AWS Secrets Manager
+- Azure Key Vault
+- Google Secret Manager
+
+#### 5.4.8 Checklist de sécurité pour les Secrets
+
+Avant d'utiliser un Secret en production :
+
+- [ ] ❌ Ne pas commiter les Secrets dans Git
+- [ ] ✅ Activer l'encryption at rest dans etcd
+- [ ] ✅ Utiliser RBAC pour limiter l'accès aux Secrets
+- [ ] ✅ Préférer les volumes aux variables d'environnement
+- [ ] ✅ Auditer régulièrement les accès aux Secrets
+- [ ] ✅ Utiliser des namespaces pour l'isolation
+- [ ] ✅ Considérer des solutions externes (Vault, Sealed Secrets)
+- [ ] ✅ Activer les logs d'audit Kubernetes
+- [ ] ✅ Rotation régulière des secrets
+- [ ] ✅ Scanner les dépôts Git pour détecter les secrets exposés
+
+#### 5.4.9 Exemple de vérification de sécurité
+
+```bash
+# Vérifier les permissions sur les secrets
+kubectl auth can-i get secrets --as=system:serviceaccount:default:default
+
+# Lister tous les secrets dans un namespace
+kubectl get secrets -n default
+
+# Auditer qui a accès aux secrets
+kubectl get rolebindings,clusterrolebindings -A -o json | \
+  jq '.items[] | select(.roleRef.kind=="Role" or .roleRef.kind=="ClusterRole") |
+  select(.subjects[]?.kind=="ServiceAccount")'
+
+# Vérifier si l'encryption at rest est configurée
+# (nécessite l'accès au serveur API)
+kubectl get configmap -n kube-system kube-apiserver-config -o yaml | grep -i encrypt
+```
+
+#### 5.4.10 Résumé des risques
+
+| Risque | Niveau | Mitigation |
+|--------|--------|------------|
+| Secrets en base64 seulement | 🔴 Critique | Utiliser des solutions de chiffrement |
+| Stockage en clair dans etcd | 🔴 Critique | Activer encryption at rest |
+| Accès via API K8s | 🟡 Moyen | RBAC strict + audit |
+| Secrets dans variables env | 🟡 Moyen | Préférer les volumes |
+| Secrets dans Git | 🔴 Critique | .gitignore + Git scanning |
+| Secrets sur disque nœud | 🟡 Moyen | Sécuriser l'accès SSH aux nœuds |
+
+**Conclusion :** Les Secrets Kubernetes sont un mécanisme de base pour gérer les données sensibles, mais ils nécessitent des mesures de sécurité supplémentaires pour une utilisation en production. Pour des environnements critiques, privilégiez des solutions dédiées comme Vault ou les gestionnaires de secrets cloud.
+
 ## Partie 6 : Labels et Selectors
 
 ### 6.1 Utilisation avancée des labels
