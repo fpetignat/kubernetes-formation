@@ -16,7 +16,7 @@ spec:
       default: my-app
     - name: chart-path
       type: string
-      default: helm/my-app
+      default: 01-helm/my-app
     - name: namespace
       type: string
       default: production
