@@ -968,9 +968,9 @@ Créez une application WordPress avec MySQL en écrivant les manifests pour :
 6. **PersistentVolumeClaim** pour WordPress
 
 7. **Deployment WordPress** :
-   - Image : `wordpress:latest`
+   - Image : `wordpress:6.4-apache`
    - 2 replicas
-   - Variables d'environnement : `WORDPRESS_DB_HOST=mysql-service`, `WORDPRESS_DB_PASSWORD` (depuis le secret)
+   - Variables d'environnement : `WORDPRESS_DB_HOST=mysql-service`, `WORDPRESS_DB_USER=root`, `WORDPRESS_DB_PASSWORD` (depuis le secret), `WORDPRESS_DB_NAME=wordpress`
    - Port : 80
 
 8. **Service WordPress** :
@@ -1540,10 +1540,12 @@ spec:
     spec:
       containers:
       - name: wordpress
-        image: wordpress:latest
+        image: wordpress:6.4-apache
         env:
         - name: WORDPRESS_DB_HOST
           value: mysql-service
+        - name: WORDPRESS_DB_USER
+          value: root
         - name: WORDPRESS_DB_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -1621,7 +1623,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: nginx:latest  # Correction 2: Nom d'image corrigé
+        image: nginx:1.24  # Correction 2: Nom d'image corrigé avec version spécifique
         ports:
         - containerPort: 80
         resources:
