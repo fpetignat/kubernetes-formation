@@ -82,7 +82,7 @@ spec:
       - name: api
         image: nginx:alpine
         ports:
-        - containerPort: 8080
+        - containerPort: 80
         resources:
           requests:
             cpu: 100m
@@ -100,7 +100,7 @@ spec:
     app: backend
   ports:
   - port: 8080
-    targetPort: 8080
+    targetPort: 80
 
 ---
 # Database Deployment
