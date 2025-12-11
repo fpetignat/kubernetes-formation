@@ -8,13 +8,14 @@ spec:
     name: cd-pipeline
   params:
     - name: git-url
+      # TODO: Remplacer par l'URL de votre repository
       value: "https://github.com/votre-username/votre-repo.git"
     - name: git-revision
       value: "main"
     - name: release-name
       value: "my-app"
     - name: chart-path
-      value: "helm/my-app"
+      value: "01-helm/my-app"
     - name: namespace
       value: "production"
     - name: image-repository

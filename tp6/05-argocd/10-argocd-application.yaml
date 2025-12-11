@@ -7,7 +7,8 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/username/my-gitops-repo.git
+    # IMPORTANT: Remplacer par l'URL de votre repository GitOps réel
+    repoURL: https://github.com/username/my-gitops-repo.git  # À PERSONNALISER
     targetRevision: HEAD
     path: apps/my-app
 

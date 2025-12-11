@@ -3,9 +3,10 @@ kind: Kustomization
 
 namespace: production
 
-bases:
+resources:
 - ../../base
 
+# Surcharge le nombre de replicas du base deployment (1 -> 5)
 replicas:
 - name: my-app
   count: 5

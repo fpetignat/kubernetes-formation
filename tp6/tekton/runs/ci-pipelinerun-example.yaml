@@ -8,6 +8,7 @@ spec:
     name: ci-pipeline
   params:
     - name: git-url
+      # TODO: Remplacer par l'URL de votre repository
       value: "https://github.com/votre-username/votre-repo.git"
     - name: git-revision
       value: "main"

@@ -1,3 +1,6 @@
+# IMPORTANT: Ce HPA nécessite qu'un Deployment nommé 'my-app' existe.
+# Créez d'abord le Deployment ou adaptez le nom (ligne 9) pour correspondre
+# à votre Deployment existant.
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:

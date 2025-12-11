@@ -65,3 +65,18 @@ spec:
           capabilities:
             drop:
             - ALL
+---
+# Service pour exposer production-app
+apiVersion: v1
+kind: Service
+metadata:
+  name: production-app
+spec:
+  selector:
+    app: production-app
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+  type: ClusterIP

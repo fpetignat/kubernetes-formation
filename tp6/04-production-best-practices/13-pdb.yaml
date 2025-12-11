@@ -9,12 +9,15 @@ spec:
       app: my-app
 ---
 # Alternative: maxUnavailable
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: my-app-pdb-max
-spec:
-  maxUnavailable: 1  # Maximum 1 pod peut être indisponible
-  selector:
-    matchLabels:
-      app: my-app
+# ATTENTION: Ne pas appliquer les deux PDBs en même temps car ils ciblent le même sélecteur
+# Décommenter cette alternative si vous préférez limiter le nombre de pods indisponibles
+# au lieu de garantir un minimum de pods disponibles
+#apiVersion: policy/v1
+#kind: PodDisruptionBudget
+#metadata:
+#  name: my-app-pdb-max
+#spec:
+#  maxUnavailable: 1  # Maximum 1 pod peut être indisponible
+#  selector:
+#    matchLabels:
+#      app: my-app
