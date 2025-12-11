@@ -31,10 +31,10 @@ data:
 
       # Alerte sur mémoire élevée
       - alert: HighMemoryUsage
-        expr: container_memory_usage_bytes{pod!=""} > 500000000
+        expr: sum(container_memory_usage_bytes{container!="",container!="POD"}) by (pod, namespace) > 500000000
         for: 2m
         labels:
           severity: warning
         annotations:
-          summary: "High memory usage on {{ $labels.pod }}"
-          description: "Pod {{ $labels.pod }} is using more than 500MB of memory"
+          summary: "High memory usage on {{ $labels.namespace }}/{{ $labels.pod }}"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is using more than 500MB of memory"
