@@ -63,7 +63,7 @@ spec:
           tier: frontend
     ports:
     - protocol: TCP
-      port: 8080
+      port: 80
 
 ---
 # NetworkPolicy 4 : Allow Database ingress from Backend only
@@ -88,13 +88,11 @@ spec:
     - protocol: TCP
       port: 5432
   egress:
-  # Allow DNS
-  - to:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: kube-system
-    ports:
+  # Allow DNS (UDP and TCP)
+  - ports:
     - protocol: UDP
+      port: 53
+    - protocol: TCP
       port: 53
 
 ---
@@ -109,12 +107,11 @@ spec:
   policyTypes:
   - Egress
   egress:
-  - to:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: kube-system
-    ports:
+  # Allow DNS (UDP and TCP)
+  - ports:
     - protocol: UDP
+      port: 53
+    - protocol: TCP
       port: 53
   # Allow communication within namespace
   - to:
