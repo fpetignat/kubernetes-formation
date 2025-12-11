@@ -21,6 +21,7 @@ L'application est composée de trois tiers :
 06-backend-code.yaml          # Code Python du backend (ConfigMap)
 06-backend-deployment.yaml    # Déploiement du backend
 07-backend-service.yaml       # Service ClusterIP pour le backend
+08-frontend-nginx-config.yaml # Configuration Nginx avec proxy API (ConfigMap)
 08-frontend-config.yaml       # HTML du frontend (ConfigMap)
 09-frontend-deployment.yaml   # Déploiement du frontend
 10-frontend-service.yaml      # Service NodePort pour le frontend
@@ -43,6 +44,7 @@ kubectl apply -f 05-database-service.yaml
 kubectl apply -f 06-backend-code.yaml
 kubectl apply -f 06-backend-deployment.yaml
 kubectl apply -f 07-backend-service.yaml
+kubectl apply -f 08-frontend-nginx-config.yaml
 kubectl apply -f 08-frontend-config.yaml
 kubectl apply -f 09-frontend-deployment.yaml
 kubectl apply -f 10-frontend-service.yaml
@@ -68,6 +70,7 @@ kubectl apply -f 00-namespace.yaml \
               -f 06-backend-code.yaml \
               -f 06-backend-deployment.yaml \
               -f 07-backend-service.yaml \
+              -f 08-frontend-nginx-config.yaml \
               -f 08-frontend-config.yaml \
               -f 09-frontend-deployment.yaml \
               -f 10-frontend-service.yaml

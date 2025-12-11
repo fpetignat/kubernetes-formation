@@ -51,6 +51,7 @@ kubectl apply -f 05-database-service.yaml
 kubectl apply -f 06-backend-code.yaml
 kubectl apply -f 06-backend-deployment.yaml
 kubectl apply -f 07-backend-service.yaml
+kubectl apply -f 08-frontend-nginx-config.yaml
 kubectl apply -f 08-frontend-config.yaml
 kubectl apply -f 09-frontend-deployment.yaml
 kubectl apply -f 10-frontend-service.yaml
@@ -107,6 +108,7 @@ kubectl apply -f kubernetes-manifests/05-database-service.yaml && \
 kubectl apply -f kubernetes-manifests/06-backend-code.yaml && \
 kubectl apply -f kubernetes-manifests/06-backend-deployment.yaml && \
 kubectl apply -f kubernetes-manifests/07-backend-service.yaml && \
+kubectl apply -f kubernetes-manifests/08-frontend-nginx-config.yaml && \
 kubectl apply -f kubernetes-manifests/08-frontend-config.yaml && \
 kubectl apply -f kubernetes-manifests/09-frontend-deployment.yaml && \
 kubectl apply -f kubernetes-manifests/10-frontend-service.yaml && \
