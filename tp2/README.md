@@ -213,10 +213,12 @@ spec:
   selector:
     matchLabels:      # DOIT correspondre aux labels du template
       app: web
+      env: prod
   template:           # Template du Pod
     metadata:
       labels:
         app: web
+        env: prod
     spec:
       containers:
       - name: nginx
@@ -352,11 +354,7 @@ spec:
   - name: http
     protocol: TCP
     port: 80
-    targetPort: 8080
-  - name: https
-    protocol: TCP
-    port: 443
-    targetPort: 8443
+    targetPort: 80
   sessionAffinity: ClientIP  # Maintenir la session sur le même pod
 ```
 
