@@ -143,7 +143,8 @@ data:
         <script>
             async function checkBackend() {
                 try {
-                    const response = await fetch('http://backend:5000/api/health');
+                    // Utilise le proxy Nginx pour atteindre le backend
+                    const response = await fetch('/api/health');
 
                     if (response.ok) {
                         const data = await response.json();
@@ -155,12 +156,13 @@ data:
                         document.getElementById('backend-info').style.display = 'block';
                         document.getElementById('backend-data').textContent = JSON.stringify(data, null, 2);
                     } else {
-                        throw new Error('Backend not responding');
+                        throw new Error('Backend not responding (HTTP ' + response.status + ')');
                     }
                 } catch (error) {
                     document.getElementById('status').className = 'status error';
                     document.getElementById('status').innerHTML =
-                        `❌ <span>Erreur: Backend non accessible. Ceci est normal si vous testez depuis l'extérieur du cluster.</span>`;
+                        `❌ <span>Erreur de connexion au backend: ${error.message}</span>`;
+                    console.error('Backend error:', error);
                 }
             }
 
