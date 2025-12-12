@@ -29,6 +29,10 @@ kind: Service
 metadata:
   name: demo-app
   namespace: monitoring
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
 spec:
   selector:
     app: demo-app
