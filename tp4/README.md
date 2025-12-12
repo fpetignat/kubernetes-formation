@@ -1090,7 +1090,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: fabxc/instrumented_app:latest
+        image: quay.io/brancz/prometheus-example-app:v0.5.0
         ports:
         - containerPort: 8080
           name: metrics
