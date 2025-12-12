@@ -411,6 +411,15 @@ Prometheus est un système de monitoring et d'alerte open-source :
 
 ### 5.2 Installation de Prometheus
 
+**Note importante sur les endpoints Prometheus** :
+
+Le job `kubernetes-service-endpoints` est configuré pour découvrir automatiquement les services via le service discovery de Kubernetes. **IMPORTANT** : Sans les `relabel_configs` appropriés, Prometheus tenterait de scraper **tous** les endpoints de services dans le cluster (kube-dns, kube-apiserver, etc.), ce qui génère des centaines d'erreurs HTTP 404 car la plupart n'exposent pas de métriques Prometheus.
+
+La configuration ci-dessus filtre uniquement les services qui ont l'annotation `prometheus.io/scrape: "true"` et utilise les annotations suivantes :
+- `prometheus.io/scrape: "true"` : Active le scraping pour ce service
+- `prometheus.io/port: "<port>"` : Port où les métriques sont exposées
+- `prometheus.io/path: "<path>"` : Chemin des métriques (par défaut `/metrics`)
+
 **Note importante sur les permissions RBAC** :
 
 Prometheus utilise le **service discovery** de Kubernetes pour découvrir automatiquement les targets (nœuds, pods, services). Pour cela, il a besoin de permissions RBAC spécifiques :
@@ -493,6 +502,31 @@ data:
       - job_name: 'kubernetes-service-endpoints'
         kubernetes_sd_configs:
           - role: endpoints
+        relabel_configs:
+          # Ne garder que les services annotés avec prometheus.io/scrape=true
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          # Utiliser le chemin spécifié dans l'annotation prometheus.io/path (par défaut /metrics)
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          # Utiliser le port spécifié dans l'annotation prometheus.io/port
+          - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          # Copier les labels du service
+          - action: labelmap
+            regex: __meta_kubernetes_service_label_(.+)
+          # Ajouter le namespace comme label
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: kubernetes_namespace
+          # Ajouter le nom du service comme label
+          - source_labels: [__meta_kubernetes_service_name]
+            target_label: kubernetes_name
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1278,6 +1312,31 @@ data:
       - job_name: 'kubernetes-service-endpoints'
         kubernetes_sd_configs:
           - role: endpoints
+        relabel_configs:
+          # Ne garder que les services annotés avec prometheus.io/scrape=true
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          # Utiliser le chemin spécifié dans l'annotation prometheus.io/path (par défaut /metrics)
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          # Utiliser le port spécifié dans l'annotation prometheus.io/port
+          - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          # Copier les labels du service
+          - action: labelmap
+            regex: __meta_kubernetes_service_label_(.+)
+          # Ajouter le namespace comme label
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: kubernetes_namespace
+          # Ajouter le nom du service comme label
+          - source_labels: [__meta_kubernetes_service_name]
+            target_label: kubernetes_name
 ```
 
 Appliquer les modifications :
