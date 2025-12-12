@@ -598,7 +598,121 @@ kubectl port-forward -n monitoring svc/prometheus 9090:9090
 
 Accédez à Prometheus via `http://localhost:9090` (si vous utilisez port-forward).
 
-### 5.3 Explorer Prometheus
+### 5.3 Vérifier que Prometheus fonctionne
+
+Avant d'explorer les métriques, vérifions que Prometheus collecte bien les données.
+
+**Exercice 6.1 : Vérifications de base**
+
+```bash
+# 1. Vérifier l'état du pod Prometheus
+kubectl get pods -n monitoring -l app=prometheus
+
+# 2. Vérifier les logs de Prometheus pour détecter les erreurs
+kubectl logs -n monitoring -l app=prometheus --tail=50
+
+# 3. Vérifier que la configuration est bien chargée
+kubectl logs -n monitoring -l app=prometheus | grep -i "Server is ready"
+
+# 4. Tester l'accès à l'interface web (si port-forward actif)
+curl -s http://localhost:9090/-/healthy
+# Devrait retourner : Prometheus is Healthy.
+
+# 5. Vérifier l'état de l'API Prometheus
+curl -s http://localhost:9090/api/v1/status/config | jq '.status'
+# Devrait retourner : "success"
+```
+
+**Exercice 6.2 : Vérifier les targets (cibles de collecte)**
+
+Les "targets" sont les endpoints que Prometheus scrape pour collecter les métriques.
+
+```bash
+# Via curl (nécessite port-forward actif sur 9090)
+curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health: .health, lastError: .lastError}'
+
+# Vérifier combien de targets sont UP
+curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.health=="up") | .labels.job' | sort | uniq -c
+```
+
+**Via l'interface web** (recommandé pour débutants) :
+1. Ouvrez `http://localhost:9090` dans votre navigateur
+2. Allez dans **Status → Targets**
+3. Vérifiez que les jobs suivants sont **UP** (en bleu) :
+   - `kubernetes-nodes`
+   - `kubernetes-cadvisor`
+   - `kubernetes-pods` (si vous avez des pods annotés)
+   - `kubernetes-service-endpoints`
+
+**Diagnostic des problèmes courants :**
+
+```bash
+# Si des targets sont DOWN, vérifier les permissions RBAC
+kubectl get clusterrole prometheus -o yaml
+kubectl get clusterrolebinding prometheus -o yaml
+
+# Vérifier que le ServiceAccount existe
+kubectl get serviceaccount prometheus -n monitoring
+
+# Vérifier les événements du namespace monitoring
+kubectl get events -n monitoring --sort-by='.lastTimestamp'
+
+# Tester manuellement l'accès aux métriques kubelet (depuis le pod Prometheus)
+PROMETHEUS_POD=$(kubectl get pod -n monitoring -l app=prometheus -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n monitoring $PROMETHEUS_POD -- wget -O- --no-check-certificate --header="Authorization: Bearer $(kubectl exec -n monitoring $PROMETHEUS_POD -- cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kubernetes.default.svc.cluster.local:443/api/v1/nodes
+```
+
+**Exercice 6.3 : Vérifier que les métriques sont collectées**
+
+```bash
+# Via curl (avec port-forward actif)
+# Vérifier que des métriques cAdvisor existent
+curl -s 'http://localhost:9090/api/v1/query?query=up' | jq '.data.result[] | {job: .metric.job, instance: .metric.instance, value: .value[1]}'
+
+# Compter le nombre de séries métriques collectées
+curl -s 'http://localhost:9090/api/v1/query?query=count({__name__=~".+"})' | jq '.data.result[0].value[1]'
+
+# Vérifier les métriques CPU des conteneurs
+curl -s 'http://localhost:9090/api/v1/query?query=container_cpu_usage_seconds_total' | jq '.data.result | length'
+# Devrait retourner un nombre > 0
+
+# Vérifier les métriques mémoire des conteneurs
+curl -s 'http://localhost:9090/api/v1/query?query=container_memory_usage_bytes' | jq '.data.result | length'
+# Devrait retourner un nombre > 0
+```
+
+**Via l'interface web** :
+1. Ouvrez `http://localhost:9090`
+2. Allez dans **Graph**
+3. Tapez `up` dans la barre de requête et cliquez sur **Execute**
+4. Vous devriez voir plusieurs targets avec la valeur `1` (UP)
+
+**Exercice 6.4 : Vérifier la collecte des métriques cAdvisor**
+
+```bash
+# Lister les jobs actifs dans Prometheus
+curl -s 'http://localhost:9090/api/v1/label/job/values' | jq '.data[]'
+
+# Vérifier les métriques du job kubernetes-cadvisor
+curl -s 'http://localhost:9090/api/v1/query?query=up{job="kubernetes-cadvisor"}' | jq '.data.result[] | {instance: .metric.instance, value: .value[1]}'
+
+# Tester une requête CPU simple
+curl -s 'http://localhost:9090/api/v1/query?query=sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m]))' | jq '.data.result[0].value'
+```
+
+**Checklist de vérification :**
+
+- [ ] Le pod Prometheus est en état `Running`
+- [ ] Aucune erreur dans les logs Prometheus
+- [ ] L'endpoint `/api/v1/targets` montre des targets UP
+- [ ] Les jobs `kubernetes-nodes` et `kubernetes-cadvisor` sont UP
+- [ ] La requête `up` retourne des résultats
+- [ ] La requête `container_cpu_usage_seconds_total` retourne des métriques
+- [ ] L'interface web est accessible sur http://localhost:9090
+
+**Si tout est OK, passez à l'exploration des métriques ! ✅**
+
+### 5.4 Explorer Prometheus
 
 **Note importante sur les métriques cAdvisor** :
 
@@ -724,7 +838,7 @@ topk(10, sum(rate(container_cpu_usage_seconds_total{container!="",container!="PO
 sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m])) by (pod, namespace) > 0.5
 ```
 
-### 5.4 Installation de Grafana
+### 5.5 Installation de Grafana
 
 Créer `05-grafana-deployment.yaml` :
 
@@ -809,7 +923,7 @@ Accédez à Grafana via `http://localhost:3000`
 - **Username** : admin
 - **Password** : admin123
 
-### 5.5 Configurer Grafana avec Prometheus
+### 5.6 Configurer Grafana avec Prometheus
 
 **Exercice 9 : Ajouter Prometheus comme source de données**
 
@@ -821,7 +935,7 @@ Accédez à Grafana via `http://localhost:3000`
    - **URL** : `http://prometheus.monitoring.svc.cluster.local:9090`
    - Cliquez sur "Save & Test"
 
-### 5.6 Créer un Dashboard
+### 5.7 Créer un Dashboard
 
 **Exercice 10 : Dashboard personnalisé**
 
@@ -841,7 +955,7 @@ Accédez à Grafana via `http://localhost:3000`
 
 8. Sauvegardez le dashboard : "Save dashboard" (💾)
 
-### 5.7 Importer des dashboards pré-configurés
+### 5.8 Importer des dashboards pré-configurés
 
 **Exercice 11 : Importer un dashboard**
 
