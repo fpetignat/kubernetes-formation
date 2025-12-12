@@ -41,10 +41,13 @@ jobs:
       - name: Run yamllint on all TPs
         run: |
           echo "Validating YAML files in all TPs..."
+          shopt -s nullglob
           for tp in tp3 tp4 tp5 tp6 tp7 tp8 tp9; do
             if [ -d "$tp" ]; then
               echo "Validating YAML files in $tp/"
-              yamllint -c .yamllint.yml $tp/*.yaml 2>/dev/null || true
+              if compgen -G "$tp/*.yaml" > /dev/null; then
+                yamllint -c .yamllint.yml $tp/*.yaml || true
+              fi
             fi
           done
 
@@ -151,11 +154,12 @@ jobs:
       - name: Validate all TP manifests with kubeconform
         run: |
           echo "Validating all Kubernetes manifests with kubeconform..."
+          shopt -s nullglob
           for tp in tp3 tp4 tp5 tp6 tp7 tp8 tp9; do
             if [ -d "$tp" ]; then
               echo ""
               echo "=== Validating $tp ==="
-              for file in $tp/*.yaml 2>/dev/null; do
+              for file in $tp/*.yaml; do
                 [ -f "$file" ] || continue
                 echo "Validating $file"
                 kubeconform -summary -output json "$file" || echo "Warning: $file has validation issues"
@@ -166,11 +170,12 @@ jobs:
       - name: Validate all TP manifests with kubectl dry-run
         run: |
           echo "Testing kubectl dry-run on all manifests..."
+          shopt -s nullglob
           for tp in tp3 tp4 tp5 tp6 tp7 tp8 tp9; do
             if [ -d "$tp" ]; then
               echo ""
               echo "=== Dry-run validation for $tp ==="
-              for file in $tp/*.yaml 2>/dev/null; do
+              for file in $tp/*.yaml; do
                 [ -f "$file" ] || continue
                 echo "Dry-run: $file"
                 kubectl apply --dry-run=client -f "$file" || echo "Warning: $file failed dry-run"
