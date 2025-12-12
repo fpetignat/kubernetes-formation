@@ -249,6 +249,73 @@ jobs:
           kubectl delete pvc --all --ignore-not-found=true
           kubectl delete pv --all --ignore-not-found=true
 
+  test-tp4-monitoring:
+    name: Test TP4 - Monitoring and Logging
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Minikube
+        uses: medyagh/setup-minikube@latest
+        with:
+          kubernetes-version: 'v1.29.0'
+
+      - name: Enable metrics-server
+        run: |
+          minikube addons enable metrics-server
+          kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system --timeout=120s || true
+
+      - name: Test HPA Demo
+        run: |
+          echo "Testing 01-hpa-demo.yaml"
+          if [ -f "tp4/01-hpa-demo.yaml" ]; then
+            kubectl apply -f tp4/01-hpa-demo.yaml
+            kubectl wait --for=condition=ready pod -l app=php-apache --timeout=120s || true
+            kubectl get pods
+            kubectl get hpa
+            kubectl delete -f tp4/01-hpa-demo.yaml --ignore-not-found=true
+          fi
+
+      - name: Test Prometheus Deployment
+        run: |
+          echo "Testing 04-prometheus-deployment.yaml"
+          if [ -f "tp4/04-prometheus-deployment.yaml" ]; then
+            kubectl apply -f tp4/04-prometheus-deployment.yaml
+            sleep 10
+            kubectl get all -n monitoring
+            kubectl wait --for=condition=ready pod -l app=prometheus -n monitoring --timeout=180s || echo "Prometheus pod not ready yet"
+            kubectl describe pod -l app=prometheus -n monitoring || true
+          fi
+
+      - name: Test Grafana Deployment
+        run: |
+          echo "Testing 05-grafana-deployment.yaml"
+          if [ -f "tp4/05-grafana-deployment.yaml" ]; then
+            kubectl apply -f tp4/05-grafana-deployment.yaml
+            sleep 10
+            kubectl get all -n monitoring
+            kubectl wait --for=condition=ready pod -l app=grafana -n monitoring --timeout=180s || echo "Grafana pod not ready yet"
+            kubectl describe pod -l app=grafana -n monitoring || true
+          fi
+
+      - name: Test Instrumented App
+        run: |
+          echo "Testing 06-instrumented-app.yaml"
+          if [ -f "tp4/06-instrumented-app.yaml" ]; then
+            kubectl apply -f tp4/06-instrumented-app.yaml
+            kubectl wait --for=condition=ready pod -l app=demo-app -n monitoring --timeout=120s || echo "Demo app not ready yet"
+            kubectl get pods -n monitoring
+            kubectl describe pod -l app=demo-app -n monitoring || true
+          fi
+
+      - name: Cleanup TP4 resources
+        if: always()
+        run: |
+          kubectl delete namespace monitoring --ignore-not-found=true --timeout=60s || true
+          kubectl delete pod --all --ignore-not-found=true
+
   test-tp5-security:
     name: Test TP5 - Security and RBAC
     runs-on: ubuntu-latest
