@@ -411,6 +411,22 @@ Prometheus est un système de monitoring et d'alerte open-source :
 
 ### 5.2 Installation de Prometheus
 
+**Note importante sur les permissions RBAC** :
+
+Prometheus utilise le **service discovery** de Kubernetes pour découvrir automatiquement les targets (nœuds, pods, services). Pour cela, il a besoin de permissions RBAC spécifiques :
+
+| Permission | Ressource | Usage |
+|------------|-----------|-------|
+| `get`, `list`, `watch` | `nodes`, `nodes/proxy`, `nodes/metrics` | Découvrir les nœuds et accéder aux métriques kubelet |
+| `get` | `/metrics`, `/metrics/cadvisor` (nonResourceURLs) | Accéder aux endpoints de métriques |
+| `get`, `list`, `watch` | `pods`, `services`, `endpoints`, `namespaces` | Service discovery pour pods et services |
+| `get`, `list`, `watch` | `ingresses` (networking.k8s.io) | Découvrir les ingresses |
+
+Sans ces permissions, Prometheus ne pourra pas :
+- ✗ Collecter les métriques cAdvisor (CPU, mémoire des conteneurs)
+- ✗ Découvrir automatiquement les pods annotés
+- ✗ Scraper les métriques des nœuds
+
 Créer `04-prometheus-deployment.yaml` :
 
 ```yaml
@@ -553,12 +569,18 @@ rules:
   resources:
   - nodes
   - nodes/proxy
+  - nodes/metrics
   - services
   - endpoints
   - pods
+  - namespaces
   verbs: ["get", "list", "watch"]
+- nonResourceURLs:
+  - /metrics
+  - /metrics/cadvisor
+  verbs: ["get"]
 - apiGroups:
-  - extensions
+  - networking.k8s.io
   resources:
   - ingresses
   verbs: ["get", "list", "watch"]
@@ -647,20 +669,51 @@ curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | selec
 **Diagnostic des problèmes courants :**
 
 ```bash
-# Si des targets sont DOWN, vérifier les permissions RBAC
-kubectl get clusterrole prometheus -o yaml
-kubectl get clusterrolebinding prometheus -o yaml
-
-# Vérifier que le ServiceAccount existe
+# 1. Vérifier que le ServiceAccount existe
 kubectl get serviceaccount prometheus -n monitoring
 
-# Vérifier les événements du namespace monitoring
-kubectl get events -n monitoring --sort-by='.lastTimestamp'
+# 2. Vérifier le ClusterRole et ses permissions
+kubectl get clusterrole prometheus -o yaml
 
-# Tester manuellement l'accès aux métriques kubelet (depuis le pod Prometheus)
+# Vérifier spécifiquement les permissions importantes :
+kubectl get clusterrole prometheus -o jsonpath='{.rules[*].resources}' | grep -E "nodes/metrics|namespaces"
+# Devrait retourner : nodes/metrics et namespaces
+
+# 3. Vérifier que le ClusterRoleBinding lie bien le SA au ClusterRole
+kubectl get clusterrolebinding prometheus -o yaml
+
+# 4. Vérifier les événements du namespace monitoring pour des erreurs d'autorisation
+kubectl get events -n monitoring --sort-by='.lastTimestamp' | grep -i "forbidden\|unauthorized\|permission"
+
+# 5. Tester l'autorisation depuis le ServiceAccount Prometheus
+kubectl auth can-i list nodes --as=system:serviceaccount:monitoring:prometheus
+# Devrait retourner : yes
+
+kubectl auth can-i get nodes/metrics --as=system:serviceaccount:monitoring:prometheus
+# Devrait retourner : yes
+
+kubectl auth can-i get pods --as=system:serviceaccount:monitoring:prometheus
+# Devrait retourner : yes
+
+# 6. Vérifier les logs Prometheus pour des erreurs d'autorisation
+kubectl logs -n monitoring -l app=prometheus --tail=100 | grep -i "forbidden\|unauthorized\|401\|403"
+
+# 7. Tester manuellement l'accès à l'API Kubernetes depuis le pod Prometheus
 PROMETHEUS_POD=$(kubectl get pod -n monitoring -l app=prometheus -o jsonpath='{.items[0].metadata.name}')
-kubectl exec -n monitoring $PROMETHEUS_POD -- wget -O- --no-check-certificate --header="Authorization: Bearer $(kubectl exec -n monitoring $PROMETHEUS_POD -- cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kubernetes.default.svc.cluster.local:443/api/v1/nodes
+kubectl exec -n monitoring $PROMETHEUS_POD -- wget -O- --no-check-certificate \
+  --header="Authorization: Bearer $(kubectl exec -n monitoring $PROMETHEUS_POD -- cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+  https://kubernetes.default.svc.cluster.local:443/api/v1/nodes 2>&1 | head -n 20
+# Ne devrait PAS retourner d'erreur 403 Forbidden
 ```
+
+**Erreurs courantes et solutions :**
+
+| Erreur | Cause | Solution |
+|--------|-------|----------|
+| `server returned HTTP status 403 Forbidden` | Permissions RBAC manquantes | Vérifier que le ClusterRole contient `nodes/metrics`, `namespaces`, et `nonResourceURLs` |
+| `Target down` pour kubernetes-cadvisor | Pas d'accès à `/metrics/cadvisor` | Ajouter `nonResourceURLs: ["/metrics", "/metrics/cadvisor"]` dans le ClusterRole |
+| `server returned HTTP status 401 Unauthorized` | ServiceAccount non lié au ClusterRole | Vérifier le ClusterRoleBinding |
+| `Failed to list *v1.Node` | Permission manquante sur les nodes | Ajouter `nodes` dans les resources du ClusterRole |
 
 **Exercice 6.3 : Vérifier que les métriques sont collectées**
 
@@ -703,7 +756,11 @@ curl -s 'http://localhost:9090/api/v1/query?query=sum(rate(container_cpu_usage_s
 **Checklist de vérification :**
 
 - [ ] Le pod Prometheus est en état `Running`
-- [ ] Aucune erreur dans les logs Prometheus
+- [ ] Le ServiceAccount `prometheus` existe dans le namespace `monitoring`
+- [ ] Le ClusterRole `prometheus` contient les permissions pour `nodes/metrics`, `namespaces`, et `nonResourceURLs`
+- [ ] Le ClusterRoleBinding lie bien le ServiceAccount au ClusterRole
+- [ ] `kubectl auth can-i get nodes/metrics --as=system:serviceaccount:monitoring:prometheus` retourne `yes`
+- [ ] Aucune erreur dans les logs Prometheus (pas de 403 Forbidden)
 - [ ] L'endpoint `/api/v1/targets` montre des targets UP
 - [ ] Les jobs `kubernetes-nodes` et `kubernetes-cadvisor` sont UP
 - [ ] La requête `up` retourne des résultats
