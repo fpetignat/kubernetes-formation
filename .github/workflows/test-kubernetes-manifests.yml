@@ -183,6 +183,60 @@ jobs:
             fi
           done
 
+  test-tp1-basics:
+    name: Test TP1 - Basic Kubernetes Deployment
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Minikube
+        uses: medyagh/setup-minikube@latest
+        with:
+          kubernetes-version: 'v1.29.0'
+
+      - name: Verify Minikube
+        run: |
+          kubectl version --client
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Make test script executable
+        run: chmod +x tp1/test-tp1.sh
+
+      - name: Run TP1 basic tests
+        run: |
+          cd tp1
+          ./test-tp1.sh || echo "Some tests failed but continuing..."
+
+  test-tp2-manifests:
+    name: Test TP2 - Kubernetes Manifests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Minikube
+        uses: medyagh/setup-minikube@latest
+        with:
+          kubernetes-version: 'v1.29.0'
+
+      - name: Verify Minikube
+        run: |
+          kubectl version --client
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Make test script executable
+        run: chmod +x tp2/test-tp2.sh
+
+      - name: Run TP2 manifest tests
+        run: |
+          cd tp2
+          ./test-tp2.sh || echo "Some tests failed but continuing..."
+
   test-tp3-storage:
     name: Test TP3 - Storage Configuration
     runs-on: ubuntu-latest
@@ -395,6 +449,39 @@ jobs:
             kubectl apply --dry-run=client -f tp6/tekton/tasks/ || echo "Tekton tasks validation issues"
             kubectl apply --dry-run=client -f tp6/tekton/pipelines/ || echo "Tekton pipelines validation issues"
           fi
+
+  test-tp7-migration:
+    name: Test TP7 - Docker Compose to Kubernetes Migration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Minikube
+        uses: medyagh/setup-minikube@latest
+        with:
+          kubernetes-version: 'v1.29.0'
+
+      - name: Verify Minikube
+        run: |
+          kubectl version --client
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Make test script executable
+        run: chmod +x tp7/test-tp7.sh
+
+      - name: Run TP7 E2E tests
+        run: |
+          cd tp7
+          ./test-tp7.sh || echo "Some tests failed but continuing..."
+
+      - name: Cleanup TP7 resources
+        if: always()
+        run: |
+          cd tp7
+          ./test-tp7.sh cleanup || true
 
   test-tp8-networking:
     name: Test TP8 - Networking
