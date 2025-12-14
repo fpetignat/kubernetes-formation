@@ -21,11 +21,14 @@ spec:
         runAsNonRoot: true
         runAsUser: 999
         fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
         image: postgres:15-alpine
         securityContext:
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop:
             - ALL
@@ -36,6 +39,16 @@ spec:
           value: "appdb"
         ports:
         - containerPort: 5432
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /var/run/postgresql
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -68,11 +81,14 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: api
         image: httpd:2.4-alpine  # Remplacer par votre API réelle
         securityContext:
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop:
             - ALL
@@ -83,6 +99,16 @@ spec:
           value: "database-service"  # Utilise le nom du service
         - name: DATABASE_PORT
           value: "5432"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /var/run/apache2
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -115,11 +141,14 @@ spec:
         runAsNonRoot: true
         runAsUser: 101
         fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: nginx
         image: nginx:alpine
         securityContext:
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop:
             - ALL
@@ -128,6 +157,16 @@ spec:
         env:
         - name: API_URL
           value: "http://backend-api-service:8080"  # Utilise le nom du service
+        volumeMounts:
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
