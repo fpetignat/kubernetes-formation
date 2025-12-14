@@ -486,10 +486,480 @@ Besoin d'accès externe ?
 
 ## Partie 5 : Exposition de l'application
 
-### 5.1 Créer un service
+### 5.1 Exemples concrets pour chaque type de service
+
+Voici des exemples pratiques et déployables pour chaque type de service. Vous pouvez les tester directement dans votre cluster.
+
+#### Exemple 1 : Service ClusterIP - Base de données Redis
+
+**Scénario :** Déployer une base de données Redis qui sera utilisée uniquement par d'autres applications dans le cluster.
+
+```yaml
+# redis-clusterip.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+      tier: backend
+  template:
+    metadata:
+      labels:
+        app: redis
+        tier: backend
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+spec:
+  type: ClusterIP  # Accessible uniquement depuis l'intérieur du cluster
+  selector:
+    app: redis
+    tier: backend
+  ports:
+  - protocol: TCP
+    port: 6379
+    targetPort: 6379
+```
+
+**Déploiement et test :**
+```bash
+# Déployer Redis avec ClusterIP
+kubectl apply -f redis-clusterip.yaml
+
+# Vérifier le service (notez l'IP interne)
+kubectl get service redis-service
+
+# Tester l'accès depuis un pod temporaire dans le cluster
+kubectl run redis-client --rm -it --image=redis:7-alpine -- redis-cli -h redis-service ping
+# Résultat attendu : PONG
+
+# Essayer d'accéder depuis l'extérieur (cela échouera car ClusterIP est interne)
+# curl http://<CLUSTER-IP>:6379  # Ne fonctionnera pas depuis votre machine
+```
+
+**Cas d'usage réel :** Base de données pour une API, cache interne, message queue (RabbitMQ, Kafka), services de stockage interne.
+
+---
+
+#### Exemple 2 : Service NodePort - Application de développement
+
+**Scénario :** Déployer une application web simple accessible depuis l'extérieur pour les tests et le développement.
+
+```yaml
+# webapp-nodeport.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp-dev
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: webapp
+      env: dev
+  template:
+    metadata:
+      labels:
+        app: webapp
+        env: dev
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: html
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: html
+        configMap:
+          name: webapp-html
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webapp-html
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <head><title>Application de Développement</title></head>
+    <body>
+      <h1>🚀 Application NodePort</h1>
+      <p>Cette application est exposée via NodePort et accessible depuis l'extérieur du cluster.</p>
+      <p>Hostname: <span id="hostname"></span></p>
+      <script>
+        fetch('/hostname.txt').then(r => r.text()).then(h => {
+          document.getElementById('hostname').textContent = h || window.location.hostname;
+        }).catch(() => {
+          document.getElementById('hostname').textContent = window.location.hostname;
+        });
+      </script>
+    </body>
+    </html>
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webapp-nodeport
+spec:
+  type: NodePort
+  selector:
+    app: webapp
+    env: dev
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+    nodePort: 30100  # Port fixe pour un accès prévisible
+```
+
+**Déploiement et test :**
+```bash
+# Déployer l'application avec NodePort
+kubectl apply -f webapp-nodeport.yaml
+
+# Vérifier le service et noter le NodePort
+kubectl get service webapp-nodeport
+
+# Option A : Avec minikube
+minikube service webapp-nodeport --url
+curl $(minikube service webapp-nodeport --url)
+
+# Option B : Avec kubeadm
+export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+curl http://$NODE_IP:30100
+
+# Ouvrir dans le navigateur
+# http://<NODE-IP>:30100
+```
+
+**Cas d'usage réel :** Applications de développement/test, API de débogage, dashboards internes, démos temporaires.
+
+---
+
+#### Exemple 3 : Service LoadBalancer - Frontend web en production
+
+**Scénario :** Déployer une application web frontend qui doit être accessible publiquement avec une IP stable.
+
+```yaml
+# frontend-loadbalancer.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-prod
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: frontend
+      tier: web
+  template:
+    metadata:
+      labels:
+        app: frontend
+        tier: web
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.24-alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-loadbalancer
+  annotations:
+    # Annotations spécifiques aux cloud providers (exemples)
+    # AWS ELB
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    # GCP
+    cloud.google.com/load-balancer-type: "External"
+    # Azure
+    service.beta.kubernetes.io/azure-load-balancer-internal: "false"
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend
+    tier: web
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  sessionAffinity: ClientIP  # Optionnel : maintenir les sessions utilisateur
+```
+
+**Déploiement et test :**
+```bash
+# Déployer l'application avec LoadBalancer
+kubectl apply -f frontend-loadbalancer.yaml
+
+# Vérifier le service
+kubectl get service frontend-loadbalancer -w
+# Attendez que EXTERNAL-IP passe de <pending> à une IP réelle
+
+# Sur un cloud provider (AWS, GCP, Azure)
+export LB_IP=$(kubectl get service frontend-loadbalancer -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+curl http://$LB_IP
+
+# Avec minikube (simulation de LoadBalancer)
+# Terminal 1 : Créer un tunnel
+minikube tunnel
+
+# Terminal 2 : Tester l'accès
+kubectl get service frontend-loadbalancer
+# L'EXTERNAL-IP sera maintenant 127.0.0.1
+curl http://127.0.0.1
+
+# Tester la haute disponibilité
+# Supprimer un pod et vérifier que le service reste accessible
+kubectl delete pod $(kubectl get pods -l app=frontend -o jsonpath='{.items[0].metadata.name}')
+curl http://$LB_IP  # Fonctionne toujours grâce aux autres réplicas
+```
+
+**Cas d'usage réel :** Site web public, API REST publique, application SaaS, microservices exposés à des clients externes.
+
+---
+
+#### Exemple 4 : Architecture complète (3 tiers)
+
+**Scénario :** Application complète avec frontend (LoadBalancer), backend (ClusterIP), et base de données (ClusterIP).
+
+```yaml
+# architecture-complete.yaml
+# Base de données (ClusterIP - interne uniquement)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db
+  template:
+    metadata:
+      labels:
+        app: db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        env:
+        - name: POSTGRES_PASSWORD
+          value: "secretpassword"
+        - name: POSTGRES_DB
+          value: "appdb"
+        ports:
+        - containerPort: 5432
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: database-service
+spec:
+  type: ClusterIP  # Accessible uniquement depuis le cluster
+  selector:
+    app: db
+  ports:
+  - port: 5432
+    targetPort: 5432
+---
+# Backend API (ClusterIP - appelé par le frontend)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+      - name: api
+        image: httpd:2.4-alpine  # Remplacer par votre API réelle
+        ports:
+        - containerPort: 80
+        env:
+        - name: DATABASE_HOST
+          value: "database-service"  # Utilise le nom du service
+        - name: DATABASE_PORT
+          value: "5432"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-api-service
+spec:
+  type: ClusterIP  # Interne, appelé uniquement par le frontend
+  selector:
+    app: api
+  ports:
+  - port: 8080
+    targetPort: 80
+---
+# Frontend (LoadBalancer - accessible publiquement)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        env:
+        - name: API_URL
+          value: "http://backend-api-service:8080"  # Utilise le nom du service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+spec:
+  type: LoadBalancer  # Accessible depuis Internet
+  selector:
+    app: frontend
+  ports:
+  - port: 80
+    targetPort: 80
+```
+
+**Déploiement et test :**
+```bash
+# Déployer toute l'architecture
+kubectl apply -f architecture-complete.yaml
+
+# Vérifier tous les services
+kubectl get services
+# Vous devriez voir :
+# - database-service (ClusterIP)
+# - backend-api-service (ClusterIP)
+# - frontend-service (LoadBalancer avec EXTERNAL-IP)
+
+# Tester la connectivité interne
+kubectl run test-pod --rm -it --image=busybox -- sh
+# Dans le pod :
+# wget -qO- http://backend-api-service:8080
+# wget -qO- http://database-service:5432
+# exit
+
+# Accéder au frontend depuis l'extérieur
+# Avec minikube tunnel
+minikube tunnel  # Dans un terminal séparé
+curl http://127.0.0.1
+
+# Sur un cloud provider
+export LB_IP=$(kubectl get service frontend-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+curl http://$LB_IP
+```
+
+**Visualisation de l'architecture :**
+```
+Internet
+   │
+   ▼
+┌──────────────────┐
+│  LoadBalancer    │ ◀── IP Publique (ex: 203.0.113.10)
+└────────┬─────────┘
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│         Cluster Kubernetes              │
+│                                         │
+│  ┌─────────────────┐                   │
+│  │ Frontend Service│ (LoadBalancer)    │
+│  │  Port 80        │                   │
+│  └────────┬────────┘                   │
+│           │                             │
+│           ▼                             │
+│  ┌─────────────────┐                   │
+│  │ Frontend Pods   │                   │
+│  │ (3 réplicas)    │                   │
+│  └────────┬────────┘                   │
+│           │                             │
+│           │ Appel HTTP interne          │
+│           ▼                             │
+│  ┌─────────────────┐                   │
+│  │ Backend API Svc │ (ClusterIP)       │
+│  │  Port 8080      │                   │
+│  └────────┬────────┘                   │
+│           │                             │
+│           ▼                             │
+│  ┌─────────────────┐                   │
+│  │ Backend Pods    │                   │
+│  │ (2 réplicas)    │                   │
+│  └────────┬────────┘                   │
+│           │                             │
+│           │ Requête SQL                 │
+│           ▼                             │
+│  ┌─────────────────┐                   │
+│  │ Database Svc    │ (ClusterIP)       │
+│  │  Port 5432      │                   │
+│  └────────┬────────┘                   │
+│           │                             │
+│           ▼                             │
+│  ┌─────────────────┐                   │
+│  │ PostgreSQL Pod  │                   │
+│  └─────────────────┘                   │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+---
+
+### 5.2 Créer un service (exemple simple)
 
 ```bash
-# Exposer le déploiement via un service de type NodePort
+# Exposer le déploiement nginx-demo via un service de type NodePort
 kubectl expose deployment nginx-demo --type=NodePort --port=80
 
 # Vérifier le service
@@ -498,7 +968,7 @@ kubectl get services
 
 **Note :** Nous utilisons NodePort ici car minikube est un environnement local. Pour comprendre quand utiliser NodePort vs ClusterIP vs LoadBalancer, référez-vous à la section 4 ci-dessus.
 
-### 5.2 Accéder à l'application
+### 5.3 Accéder à l'application
 
 #### Option A : Avec minikube
 
