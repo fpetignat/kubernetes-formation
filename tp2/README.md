@@ -724,22 +724,624 @@ kubectl get configmap -n kube-system kube-apiserver-config -o yaml | grep -i enc
 
 **Conclusion :** Les Secrets Kubernetes sont un mécanisme de base pour gérer les données sensibles, mais ils nécessitent des mesures de sécurité supplémentaires pour une utilisation en production. Pour des environnements critiques, privilégiez des solutions dédiées comme Vault ou les gestionnaires de secrets cloud.
 
-## Partie 6 : Labels et Selectors
+## Partie 6 : Labels et Selectors - Maîtrise complète
 
-### 6.1 Utilisation avancée des labels
+### 6.1 Introduction aux labels
 
-Créer `12-labeled-resources.yaml` :
+Les **labels** sont des paires clé-valeur attachées aux objets Kubernetes (Pods, Services, Deployments, etc.). Ils sont fondamentaux pour :
+- **Organiser** : Grouper et catégoriser les ressources
+- **Sélectionner** : Identifier des ensembles de ressources
+- **Connecter** : Lier les Services aux Pods, les Deployments aux Pods, etc.
+- **Filtrer** : Interroger et manipuler des groupes de ressources
+
+**Syntaxe et contraintes :**
+```yaml
+labels:
+  key: value              # Format de base
+  app: nginx              # Nom d'application
+  env: production         # Environnement
+  version: v1.2.3         # Version
+  tier: frontend          # Tier architectural
+```
+
+**Règles de nommage :**
+- Clés : max 63 caractères (préfixe optionnel jusqu'à 253 caractères + `/`)
+- Valeurs : max 63 caractères
+- Caractères autorisés : alphanumériques, `-`, `_`, `.`
+- Doit commencer et finir par un caractère alphanumérique
+
+### 6.2 matchLabels : Sélection simple
+
+`matchLabels` effectue une correspondance **exacte** sur toutes les paires clé-valeur spécifiées (AND logique).
+
+**Exemple 1 : Deployment avec matchLabels simple**
+
+Créer `12a-deployment-matchlabels.yaml` :
 
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend
+  name: webapp-deployment
   labels:
-    app: myapp
+    app: webapp
     tier: frontend
-    environment: production
-    version: v1.0.0
+spec:
+  replicas: 3
+  selector:
+    matchLabels:      # Sélection EXACTE
+      app: webapp     # Le pod DOIT avoir app=webapp
+      tier: frontend  # ET tier=frontend
+  template:
+    metadata:
+      labels:
+        app: webapp
+        tier: frontend
+        version: v1.0.0      # Labels supplémentaires OK
+        environment: prod    # mais matchLabels doit correspondre
+    spec:
+      containers:
+      - name: webapp
+        image: nginx:1.24
+        ports:
+        - containerPort: 80
+        # Contexte de sécurité
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webapp-service
+spec:
+  selector:
+    app: webapp       # Sélectionne TOUS les pods avec app=webapp
+    tier: frontend    # ET tier=frontend
+  ports:
+  - port: 80
+    targetPort: 80
+```
+
+**⚠️ Règle CRITIQUE :** Les labels du `selector.matchLabels` **DOIVENT** être un sous-ensemble des labels du `template.metadata.labels`. Sinon, le Deployment ne pourra pas gérer ses Pods.
+
+**Exemple d'erreur courante :**
+```yaml
+spec:
+  selector:
+    matchLabels:
+      app: webapp      # ❌ ERREUR !
+  template:
+    metadata:
+      labels:
+        app: different-name  # Ne correspond pas !
+```
+
+### 6.3 matchExpressions : Sélection avancée
+
+`matchExpressions` permet des sélections plus complexes avec des opérateurs avancés.
+
+**Syntaxe :**
+```yaml
+selector:
+  matchExpressions:
+  - key: <label-key>
+    operator: <In|NotIn|Exists|DoesNotExist>
+    values: [<val1>, <val2>, ...]  # Requis pour In et NotIn, interdit pour Exists et DoesNotExist
+```
+
+### 6.4 Les 4 opérateurs de matchExpressions
+
+#### Opérateur 1 : `In`
+Sélectionne les ressources où la clé existe ET la valeur est dans la liste.
+
+**Exemple : Déploiement multi-environnements**
+
+Créer `12b-matchexpressions-in.yaml` :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multi-env-app
+spec:
+  replicas: 3
+  selector:
+    matchExpressions:
+    - key: environment
+      operator: In
+      values: ["staging", "production"]  # Pods avec env=staging OU env=production
+    - key: app
+      operator: In
+      values: ["myapp"]                  # ET app=myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+        environment: production  # Correspond car "production" est dans la liste
+        tier: backend
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.24-alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+```
+
+**Cas d'usage :** Gérer plusieurs environnements avec un seul Service.
+
+```yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: multi-env-service
+spec:
+  selector:
+    app: myapp
+    # Ce service cible les pods staging ET production
+  ports:
+  - port: 80
+```
+
+#### Opérateur 2 : `NotIn`
+Sélectionne les ressources où la clé existe ET la valeur n'est PAS dans la liste.
+
+**Exemple : Exclure les environnements de test**
+
+Créer `12c-matchexpressions-notin.yaml` :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prod-only-app
+spec:
+  replicas: 2
+  selector:
+    matchExpressions:
+    - key: environment
+      operator: NotIn
+      values: ["dev", "test"]  # Exclut dev et test
+    - key: app
+      operator: In
+      values: ["critical-app"]
+  template:
+    metadata:
+      labels:
+        app: critical-app
+        environment: production  # OK car pas dans [dev, test]
+        criticality: high
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.24-alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+```
+
+**Cas d'usage :** NetworkPolicies pour bloquer le trafic vers les environnements non-production.
+
+#### Opérateur 3 : `Exists`
+Sélectionne les ressources où la clé existe, **peu importe sa valeur**.
+
+**Exemple : Tous les pods avec un label de monitoring**
+
+Créer `12d-matchexpressions-exists.yaml` :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitored-app
+spec:
+  replicas: 2
+  selector:
+    matchExpressions:
+    - key: monitoring
+      operator: Exists  # Peu importe la valeur : monitoring=true, monitoring=enabled, etc.
+    - key: app
+      operator: In
+      values: ["monitored-app"]
+  template:
+    metadata:
+      labels:
+        app: monitored-app
+        monitoring: enabled  # N'importe quelle valeur fonctionne
+        team: platform
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.24-alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+```
+
+**Cas d'usage :**
+- Sélectionner tous les pods qui doivent être monitorés (peu importe la solution de monitoring)
+- Identifier les ressources qui doivent être sauvegardées
+
+#### Opérateur 4 : `DoesNotExist`
+Sélectionne les ressources où la clé **n'existe PAS**.
+
+**Exemple : Pods sans environnement spécifié (fallback)**
+
+Créer `12e-matchexpressions-doesnotexist.yaml` :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: default-env-app
+spec:
+  replicas: 1
+  selector:
+    matchExpressions:
+    - key: environment
+      operator: DoesNotExist  # Pods sans label "environment"
+    - key: app
+      operator: In
+      values: ["legacy-app"]
+  template:
+    metadata:
+      labels:
+        app: legacy-app
+        # Pas de label "environment"
+        legacy: "true"
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.24-alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+```
+
+**Cas d'usage :**
+- Identifier les ressources non étiquetées (pour audit)
+- Appliquer des politiques par défaut aux ressources sans configuration spécifique
+
+### 6.5 Combinaison : matchLabels + matchExpressions
+
+Vous pouvez combiner `matchLabels` et `matchExpressions` - toutes les conditions doivent être satisfaites (AND logique).
+
+**Exemple : Sélection hybride complexe**
+
+Créer `12f-hybrid-selector.yaml` :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hybrid-selector-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:          # Correspondance exacte
+      app: myapp
+      tier: backend
+    matchExpressions:     # Conditions avancées
+    - key: environment
+      operator: In
+      values: ["staging", "production"]
+    - key: version
+      operator: Exists    # Doit avoir un label version
+    - key: deprecated
+      operator: DoesNotExist  # Ne doit PAS être déprécié
+  template:
+    metadata:
+      labels:
+        app: myapp                # ✓ matchLabels
+        tier: backend             # ✓ matchLabels
+        environment: production   # ✓ In [staging, production]
+        version: v2.1.0           # ✓ Exists
+        # deprecated: "true"      # ✓ DoesNotExist (commenté = n'existe pas)
+    spec:
+      containers:
+      - name: backend
+        image: nginx:1.24-alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+```
+
+### 6.6 Labels recommandés par Kubernetes
+
+Kubernetes recommande un ensemble de labels standardisés pour une meilleure interopérabilité.
+
+**Labels recommandés officiels :**
+
+Créer `12g-recommended-labels.yaml` :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: best-practice-app
+  labels:
+    # Labels recommandés par Kubernetes
+    app.kubernetes.io/name: nginx           # Nom de l'application
+    app.kubernetes.io/instance: nginx-prod  # Instance unique
+    app.kubernetes.io/version: "1.24.0"     # Version actuelle
+    app.kubernetes.io/component: webserver  # Composant dans l'archi
+    app.kubernetes.io/part-of: ecommerce    # Application parente
+    app.kubernetes.io/managed-by: kubectl   # Outil de gestion
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nginx
+      app.kubernetes.io/instance: nginx-prod
+  template:
+    metadata:
+      labels:
+        # Même structure de labels
+        app.kubernetes.io/name: nginx
+        app.kubernetes.io/instance: nginx-prod
+        app.kubernetes.io/version: "1.24.0"
+        app.kubernetes.io/component: webserver
+        app.kubernetes.io/part-of: ecommerce
+        app.kubernetes.io/managed-by: kubectl
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.24
+        ports:
+        - name: http
+          containerPort: 80
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+  labels:
+    app.kubernetes.io/name: nginx
+    app.kubernetes.io/instance: nginx-prod
+    app.kubernetes.io/component: webserver
+spec:
+  selector:
+    app.kubernetes.io/name: nginx
+    app.kubernetes.io/instance: nginx-prod
+  ports:
+  - port: 80
+    targetPort: http
+```
+
+**Tableau des labels recommandés :**
+
+| Label | Description | Exemple |
+|-------|-------------|---------|
+| `app.kubernetes.io/name` | Nom de l'application | `mysql`, `wordpress` |
+| `app.kubernetes.io/instance` | Instance unique | `mysql-prod`, `wordpress-dev` |
+| `app.kubernetes.io/version` | Version actuelle | `5.7.21`, `1.0.0` |
+| `app.kubernetes.io/component` | Rôle dans l'architecture | `database`, `cache`, `frontend` |
+| `app.kubernetes.io/part-of` | Application parente | `ecommerce`, `blog-platform` |
+| `app.kubernetes.io/managed-by` | Outil de gestion | `helm`, `kubectl`, `argocd` |
+
+### 6.7 Exercices pratiques
+
+**Exercice 8a : Manipulation avec les selectors**
+
+```bash
+# 1. Créer des ressources avec différents labels
+kubectl apply -f 12a-deployment-matchlabels.yaml
+kubectl apply -f 12b-matchexpressions-in.yaml
+kubectl apply -f 12c-matchexpressions-notin.yaml
+
+# 2. Lister tous les pods (toutes les applications)
+kubectl get pods --show-labels
+
+# 3. Sélectionner les pods avec app=webapp
+kubectl get pods -l app=webapp
+
+# 4. Sélectionner les pods avec environment in (production, staging)
+kubectl get pods -l 'environment in (production,staging)'
+
+# 5. Sélectionner les pods qui ont le label monitoring (peu importe la valeur)
+kubectl get pods -l monitoring
+
+# 6. Sélectionner les pods qui N'ONT PAS le label deprecated
+kubectl get pods -l '!deprecated'
+
+# 7. Combinaison : app=myapp ET environment=production
+kubectl get pods -l 'app=myapp,environment=production'
+
+# 8. Combinaison avec exclusion : app=myapp ET environment NOT IN (dev, test)
+kubectl get pods -l 'app=myapp,environment notin (dev,test)'
+```
+
+**Exercice 8b : Modifier les labels dynamiquement**
+
+```bash
+# Ajouter un label à un pod
+kubectl label pod <pod-name> tested=true
+
+# Modifier un label existant (--overwrite requis)
+kubectl label pod <pod-name> environment=staging --overwrite
+
+# Supprimer un label (suffixe -)
+kubectl label pod <pod-name> tested-
+
+# Ajouter un label à tous les pods d'un deployment
+kubectl label pods -l app=webapp team=platform
+
+# Vérifier les changements
+kubectl get pods --show-labels
+```
+
+**Exercice 8c : Services et selectors**
+
+Créer `12h-service-selector-test.yaml` :
+
+```yaml
+# Déploiement frontend
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
 spec:
   replicas: 2
   selector:
@@ -751,23 +1353,37 @@ spec:
       labels:
         app: myapp
         tier: frontend
-        environment: production
         version: v1.0.0
     spec:
       containers:
       - name: nginx
-        image: nginx:alpine
-
+        image: nginx:1.24-alpine
+        ports:
+        - containerPort: 80
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ---
+# Déploiement backend
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend
-  labels:
-    app: myapp
-    tier: backend
-    environment: production
-    version: v1.0.0
 spec:
   replicas: 3
   selector:
@@ -779,14 +1395,22 @@ spec:
       labels:
         app: myapp
         tier: backend
-        environment: production
         version: v1.0.0
     spec:
       containers:
       - name: api
-        image: httpd:alpine
-
+        image: httpd:2.4-alpine
+        ports:
+        - containerPort: 80
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
 ---
+# Service pour frontend uniquement
 apiVersion: v1
 kind: Service
 metadata:
@@ -794,12 +1418,12 @@ metadata:
 spec:
   selector:
     app: myapp
-    tier: frontend
+    tier: frontend  # Sélectionne UNIQUEMENT les pods frontend
   ports:
   - port: 80
     targetPort: 80
-
 ---
+# Service pour backend uniquement
 apiVersion: v1
 kind: Service
 metadata:
@@ -807,39 +1431,286 @@ metadata:
 spec:
   selector:
     app: myapp
-    tier: backend
+    tier: backend  # Sélectionne UNIQUEMENT les pods backend
+  ports:
+  - port: 80
+    targetPort: 80
+---
+# Service pour TOUTE l'application (frontend + backend)
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-service
+spec:
+  selector:
+    app: myapp  # Sélectionne TOUS les pods avec app=myapp (frontend ET backend)
   ports:
   - port: 80
     targetPort: 80
 ```
 
-**Exercice 8 : Manipulation avec les labels**
+**Tester les selectors de Service :**
 
-1. Créez toutes les ressources ci-dessus
-2. Listez toutes les ressources de l'application :
-   ```bash
-   kubectl get all -l app=myapp
+```bash
+# Appliquer les ressources
+kubectl apply -f 12h-service-selector-test.yaml
+
+# Vérifier les endpoints de chaque service
+kubectl get endpoints
+
+# Frontend service doit avoir 2 endpoints (2 replicas frontend)
+kubectl get endpoints frontend-service
+
+# Backend service doit avoir 3 endpoints (3 replicas backend)
+kubectl get endpoints backend-service
+
+# App service doit avoir 5 endpoints (2 frontend + 3 backend)
+kubectl get endpoints app-service
+
+# Afficher les détails
+kubectl describe service frontend-service
+kubectl describe service backend-service
+kubectl describe service app-service
+```
+
+**Exercice 8d : Debugging des selectors**
+
+Fichier avec erreur `12i-buggy-selector.yaml` :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buggy-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: myapp      # ❌ ERREUR
+      tier: frontend  # ❌ ERREUR
+  template:
+    metadata:
+      labels:
+        app: different-app  # Ne correspond PAS au selector !
+        tier: backend       # Ne correspond PAS au selector !
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+```
+
+**Mission :**
+1. Essayez d'appliquer ce manifest : `kubectl apply -f 12i-buggy-selector.yaml`
+2. Lisez le message d'erreur
+3. Identifiez le problème
+4. Corrigez le manifest
+
+### 6.8 Cas d'usage avancés
+
+**Cas 1 : Canary Deployment avec labels**
+
+```yaml
+# Version stable (90% du trafic)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-stable
+spec:
+  replicas: 9
+  selector:
+    matchLabels:
+      app: myapp
+      track: stable
+  template:
+    metadata:
+      labels:
+        app: myapp
+        track: stable
+        version: v1.0.0
+    spec:
+      containers:
+      - name: app
+        image: myapp:1.0.0
+---
+# Version canary (10% du trafic)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-canary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myapp
+      track: canary
+  template:
+    metadata:
+      labels:
+        app: myapp
+        track: canary
+        version: v2.0.0
+    spec:
+      containers:
+      - name: app
+        image: myapp:2.0.0
+---
+# Service qui distribue le trafic sur les deux versions
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp-service
+spec:
+  selector:
+    app: myapp  # Sélectionne stable ET canary
+  ports:
+  - port: 80
+```
+
+**Cas 2 : Affinity rules avec labels**
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cache-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: cache
+  template:
+    metadata:
+      labels:
+        app: cache
+        tier: cache
+    spec:
+      # Anti-affinité : Ne pas placer 2 pods cache sur le même nœud
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - cache
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - name: redis
+        image: redis:7-alpine
+```
+
+### 6.9 Bonnes pratiques
+
+✅ **À FAIRE :**
+
+1. **Utiliser des labels cohérents** dans toute l'organisation
+   ```yaml
+   labels:
+     app: myapp
+     environment: production
+     team: platform
+     cost-center: engineering
    ```
-3. Listez uniquement le frontend :
-   ```bash
-   kubectl get all -l tier=frontend
+
+2. **Préférer les labels recommandés** par Kubernetes
+   ```yaml
+   labels:
+     app.kubernetes.io/name: nginx
+     app.kubernetes.io/instance: nginx-prod
    ```
-4. Listez le backend :
-   ```bash
-   kubectl get all -l tier=backend
+
+3. **S'assurer de la correspondance selector ↔ labels**
+   ```yaml
+   selector:
+     matchLabels:
+       app: myapp  # ✓ Doit correspondre
+   template:
+     metadata:
+       labels:
+         app: myapp  # ✓ aux labels du template
    ```
-5. Filtrez par environnement :
-   ```bash
-   kubectl get all -l environment=production
+
+4. **Utiliser des labels pour la facturation** (cloud)
+   ```yaml
+   labels:
+     billing/team: platform
+     billing/project: ecommerce
    ```
-6. Utilisez des sélecteurs multiples :
-   ```bash
-   kubectl get pods -l 'app=myapp,tier in (frontend,backend)'
+
+5. **Documenter la stratégie de labeling** de votre organisation
+
+❌ **À ÉVITER :**
+
+1. **Labels trop longs ou complexes**
+   ```yaml
+   labels:
+     this-is-a-very-long-label-name-that-is-hard-to-type: value  # ❌
    ```
-7. Ajoutez un label à un pod existant :
-   ```bash
-   kubectl label pod <pod-name> tested=true
+
+2. **Valeurs changeantes** (timestamps, IDs aléatoires)
+   ```yaml
+   labels:
+     created-at: "2024-01-15T10:30:00Z"  # ❌ Change à chaque déploiement
    ```
+
+3. **Informations sensibles dans les labels**
+   ```yaml
+   labels:
+     api-key: secret123  # ❌ Les labels sont visibles !
+   ```
+
+4. **Selectors trop permissifs**
+   ```yaml
+   selector:
+     matchLabels:
+       app: myapp  # ⚠️ Peut sélectionner trop de pods
+   ```
+
+5. **Oublier de mettre à jour les selectors lors des modifications**
+
+### 6.10 Résumé des selectors
+
+| Type | Syntaxe | Use Case |
+|------|---------|----------|
+| **matchLabels** | `key: value` | Sélection simple et exacte |
+| **In** | `operator: In, values: [v1, v2]` | Sélectionner parmi plusieurs valeurs |
+| **NotIn** | `operator: NotIn, values: [v1, v2]` | Exclure certaines valeurs |
+| **Exists** | `operator: Exists` | Vérifier la présence d'un label |
+| **DoesNotExist** | `operator: DoesNotExist` | Vérifier l'absence d'un label |
+
+**Commandes essentielles :**
+
+```bash
+# Afficher les labels
+kubectl get pods --show-labels
+
+# Filtrer par label égalité
+kubectl get pods -l app=myapp
+
+# Filtrer par label inégalité
+kubectl get pods -l app!=myapp
+
+# Filtrer In
+kubectl get pods -l 'environment in (prod,staging)'
+
+# Filtrer NotIn
+kubectl get pods -l 'environment notin (dev,test)'
+
+# Filtrer Exists
+kubectl get pods -l environment
+
+# Filtrer DoesNotExist
+kubectl get pods -l '!environment'
+
+# Combinaisons
+kubectl get pods -l 'app=myapp,environment=prod'
+
+# Ajouter/Modifier/Supprimer labels
+kubectl label pod <name> key=value
+kubectl label pod <name> key=value --overwrite
+kubectl label pod <name> key-
+```
 
 ## Partie 7 : Namespaces et organisation
 
