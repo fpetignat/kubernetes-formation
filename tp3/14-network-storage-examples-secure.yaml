@@ -81,6 +81,8 @@ spec:
         runAsGroup: 1000
         fsGroup: 2000
         fsGroupChangePolicy: "OnRootMismatch"
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: nginx
         image: nginx:1.25-alpine
@@ -355,89 +357,118 @@ spec:
       medium: Memory
       sizeLimit: 256Mi
 
----
-# Exemple 5: NFS Server déployé dans Kubernetes (pour dev/test)
-# ⚠️ NON RECOMMANDÉ pour production - utiliser un NFS externe dédié
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: nfs-server-storage
-  namespace: storage-system
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: standard
-  resources:
-    requests:
-      storage: 200Gi
-
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: nfs-server
-  namespace: storage-system
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: nfs-server
-  template:
-    metadata:
-      labels:
-        app: nfs-server
-    spec:
-      securityContext:
-        runAsNonRoot: false  # NFS server nécessite root (limitation)
-        fsGroup: 65534
-      containers:
-      - name: nfs-server
-        image: k8s.gcr.io/volume-nfs:0.8
-        ports:
-        - name: nfs
-          containerPort: 2049
-        - name: mountd
-          containerPort: 20048
-        - name: rpcbind
-          containerPort: 111
-        securityContext:
-          privileged: true  # Nécessaire pour NFS server
-          capabilities:
-            add:
-            - SYS_ADMIN
-            - SETPCAP
-        volumeMounts:
-        - name: storage
-          mountPath: /exports
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-      volumes:
-      - name: storage
-        persistentVolumeClaim:
-          claimName: nfs-server-storage
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: nfs-server
-  namespace: storage-system
-spec:
-  selector:
-    app: nfs-server
-  ports:
-  - name: nfs
-    port: 2049
-  - name: mountd
-    port: 20048
-  - name: rpcbind
-    port: 111
-  clusterIP: 10.96.0.100  # IP fixe pour faciliter la configuration
+# ---
+# ⚠️⚠️⚠️ EXEMPLE DÉSACTIVÉ - NE PAS UTILISER EN PRODUCTION ⚠️⚠️⚠️
+#
+# Exemple 5: NFS Server déployé dans Kubernetes
+#
+# AVERTISSEMENT IMPORTANT:
+# - Ce serveur NFS nécessite des privilèges élevés (privileged: true, SYS_ADMIN)
+# - Il présente des RISQUES DE SÉCURITÉ MAJEURS
+# - Il NE DOIT JAMAIS être utilisé en production
+# - Cet exemple est commenté pour éviter les déploiements accidentels
+#
+# Pour la production, TOUJOURS utiliser:
+# - Un serveur NFS dédié externe au cluster Kubernetes
+# - Un appliance NAS professionnel (NetApp, EMC, etc.)
+# - Un service cloud managé (AWS EFS, Azure Files, GCP Filestore)
+#
+# Si vous avez absolument besoin de comprendre comment fonctionne un serveur NFS
+# dans Kubernetes pour un environnement de développement LOCAL UNIQUEMENT:
+# 1. Décommentez ce code
+# 2. Comprenez les risques de sécurité
+# 3. Ne l'exposez JAMAIS à un réseau non sécurisé
+# 4. Supprimez-le immédiatement après vos tests
+#
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: nfs-server-storage
+#   namespace: storage-system
+# spec:
+#   accessModes:
+#     - ReadWriteOnce
+#   storageClassName: standard
+#   resources:
+#     requests:
+#       storage: 200Gi
+#
+# ---
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: nfs-server
+#   namespace: storage-system
+#   annotations:
+#     # Avertissement pour les scanners de sécurité
+#     security.warning: "This NFS server requires elevated privileges and should NEVER be used in production"
+# spec:
+#   replicas: 1
+#   selector:
+#     matchLabels:
+#       app: nfs-server
+#   template:
+#     metadata:
+#       labels:
+#         app: nfs-server
+#       annotations:
+#         security.warning: "Privileged container - development only"
+#     spec:
+#       # ⚠️ RISQUE DE SÉCURITÉ: Le serveur NFS nécessite root
+#       securityContext:
+#         runAsNonRoot: false
+#         fsGroup: 65534
+#       containers:
+#       - name: nfs-server
+#         image: k8s.gcr.io/volume-nfs:0.8
+#         ports:
+#         - name: nfs
+#           containerPort: 2049
+#         - name: mountd
+#           containerPort: 20048
+#         - name: rpcbind
+#           containerPort: 111
+#         # ⚠️ RISQUE DE SÉCURITÉ CRITIQUE
+#         securityContext:
+#           privileged: true  # Donne accès complet au système hôte
+#           capabilities:
+#             add:
+#             - SYS_ADMIN  # Permet des opérations système privilégiées
+#             - SETPCAP
+#         volumeMounts:
+#         - name: storage
+#           mountPath: /exports
+#         resources:
+#           requests:
+#             memory: "256Mi"
+#             cpu: "250m"
+#           limits:
+#             memory: "512Mi"
+#             cpu: "500m"
+#       volumes:
+#       - name: storage
+#         persistentVolumeClaim:
+#           claimName: nfs-server-storage
+#
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: nfs-server
+#   namespace: storage-system
+# spec:
+#   selector:
+#     app: nfs-server
+#   ports:
+#   - name: nfs
+#     port: 2049
+#   - name: mountd
+#     port: 20048
+#   - name: rpcbind
+#     port: 111
+#   # Note: clusterIP statique peut causer des conflits
+#   # Utilisez plutôt un DNS interne
+#   # clusterIP: 10.96.0.100
 
 ---
 # Exemple 6: StatefulSet avec stockage pour chaque replica
@@ -463,6 +494,8 @@ spec:
         runAsUser: 999
         fsGroup: 999
         fsGroupChangePolicy: "OnRootMismatch"
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: database
         image: cassandra:4.1
@@ -472,8 +505,13 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /var/lib/cassandra
+        - name: tmp
+          mountPath: /tmp
+        - name: cassandra-logs
+          mountPath: /var/log/cassandra
         securityContext:
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop:
             - ALL
@@ -484,6 +522,14 @@ spec:
           limits:
             memory: "4Gi"
             cpu: "2000m"
+
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: cassandra-logs
+        emptyDir:
+          sizeLimit: 2Gi
 
   # VolumeClaimTemplates: crée un PVC par replica
   volumeClaimTemplates:
@@ -534,6 +580,8 @@ spec:
             runAsNonRoot: true
             runAsUser: 1000
             fsGroup: 2000
+            seccompProfile:
+              type: RuntimeDefault
           containers:
           - name: backup
             image: amazon/aws-cli:2.13.0
