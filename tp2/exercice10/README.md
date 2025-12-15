@@ -88,3 +88,23 @@ kubectl delete namespace wordpress-app
 3. **Persistance** : Les données MySQL et WordPress sont stockées dans des PersistentVolumeClaims
 4. **Networking** : WordPress se connecte à MySQL via le service `mysql-service`
 5. **Exposition** : WordPress est exposé via un service NodePort sur le port 30080
+
+## Sécurité
+
+Cette configuration implémente les meilleures pratiques de sécurité Kubernetes :
+
+### MySQL (wordpress-mysql.yaml)
+- **runAsNonRoot**: true - Le container tourne avec l'utilisateur mysql (UID 999)
+- **readOnlyRootFilesystem**: true - Système de fichiers en lecture seule avec volumes emptyDir pour /tmp et /var/run/mysqld
+- **allowPrivilegeEscalation**: false - Empêche l'escalade de privilèges
+- **capabilities**: DROP ALL - Suppression de toutes les capabilities Linux
+- **seccompProfile**: RuntimeDefault - Utilisation du profil seccomp par défaut
+
+### WordPress (wordpress-app.yaml)
+- **runAsNonRoot**: true - Le container tourne avec l'utilisateur www-data (UID 33)
+- **readOnlyRootFilesystem**: true - Système de fichiers en lecture seule avec volumes emptyDir pour /tmp, /var/run/apache2 et /var/lock/apache2
+- **allowPrivilegeEscalation**: false - Empêche l'escalade de privilèges
+- **capabilities**: DROP ALL - Suppression de toutes les capabilities Linux
+- **seccompProfile**: RuntimeDefault - Utilisation du profil seccomp par défaut
+
+**Note sur le port 80** : WordPress utilise le port 80 (port privileged) pour la compatibilité standard. L'image officielle WordPress est configurée pour permettre à l'utilisateur www-data (non-root) d'écouter sur ce port via la configuration Apache.

@@ -26,6 +26,13 @@ spec:
       labels:
         app: mysql
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: mysql
         image: mysql:8.0
@@ -39,13 +46,29 @@ spec:
           value: wordpress
         ports:
         - containerPort: 3306
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 999
+          capabilities:
+            drop:
+            - ALL
         volumeMounts:
         - name: mysql-storage
           mountPath: /var/lib/mysql
+        - name: tmp
+          mountPath: /tmp
+        - name: run-mysqld
+          mountPath: /var/run/mysqld
       volumes:
       - name: mysql-storage
         persistentVolumeClaim:
           claimName: mysql-pvc
+      - name: tmp
+        emptyDir: {}
+      - name: run-mysqld
+        emptyDir: {}
 
 ---
 apiVersion: v1

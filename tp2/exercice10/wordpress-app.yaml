@@ -26,6 +26,13 @@ spec:
       labels:
         app: wordpress
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 33
+        runAsGroup: 33
+        fsGroup: 33
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: wordpress
         image: wordpress:6.4-apache
@@ -41,15 +48,37 @@ spec:
               key: password
         - name: WORDPRESS_DB_NAME
           value: wordpress
+        # Port 80 est utilisé pour la compatibilité standard WordPress/Apache
+        # L'image officielle est configurée pour écouter sur ce port avec l'utilisateur www-data
         ports:
         - containerPort: 80
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 33
+          capabilities:
+            drop:
+            - ALL
         volumeMounts:
         - name: wordpress-storage
           mountPath: /var/www/html
+        - name: tmp
+          mountPath: /tmp
+        - name: run-apache
+          mountPath: /var/run/apache2
+        - name: lock-apache
+          mountPath: /var/lock/apache2
       volumes:
       - name: wordpress-storage
         persistentVolumeClaim:
           claimName: wordpress-pvc
+      - name: tmp
+        emptyDir: {}
+      - name: run-apache
+        emptyDir: {}
+      - name: lock-apache
+        emptyDir: {}
 
 ---
 apiVersion: v1
