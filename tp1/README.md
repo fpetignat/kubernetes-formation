@@ -289,7 +289,143 @@ kubectl get deployments
 kubectl get pods
 ```
 
-### 3.2 Examiner le pod
+### 3.2 Comprendre ce qui se passe en coulisse
+
+Lorsque vous exécutez `kubectl create deployment nginx-demo --image=nginx:latest`, voici le processus complet qui se déroule dans votre cluster Kubernetes :
+
+#### Le flux de création du déploiement
+
+**1. kubectl → API Server**
+- `kubectl` envoie une requête HTTP REST à l'**API Server** de Kubernetes
+- L'API Server authentifie et autorise la requête
+- La définition du Deployment est stockée dans **etcd** (la base de données du cluster)
+
+**2. Deployment Controller**
+- Le **Deployment Controller** (dans `kube-controller-manager`) détecte le nouveau Deployment
+- Il crée automatiquement un **ReplicaSet** pour gérer les pods
+- Le ReplicaSet spécifie 1 réplica par défaut
+
+**3. ReplicaSet Controller**
+- Le **ReplicaSet Controller** crée la définition d'un **Pod** avec le conteneur nginx
+
+**4. Scheduler**
+- Le **kube-scheduler** cherche le meilleur nœud disponible
+- Il assigne le pod à un nœud en fonction des ressources disponibles
+
+**5. Kubelet (sur le nœud sélectionné)**
+- Le **kubelet** reçoit l'instruction de créer le pod
+- Il communique avec le **container runtime** (containerd, Docker, CRI-O)
+- C'est ici que l'image va être téléchargée !
+
+#### Où Kubernetes va-t-il chercher l'image ?
+
+Quand vous spécifiez `--image=nginx:latest`, le nom complet implicite est :
+
+```
+docker.io/library/nginx:latest
+└────┬────┘ └──┬──┘ └─┬─┘ └──┬─┘
+  Registry  Namespace Nom  Tag
+```
+
+- **Registry** : `docker.io` (Docker Hub) - **DÉFAUT** si non spécifié
+- **Namespace** : `library` (images officielles Docker) - **DÉFAUT**
+- **Image** : `nginx`
+- **Tag** : `latest`
+
+**Processus de téléchargement :**
+
+1. Le kubelet demande au container runtime l'image `nginx:latest`
+2. Le runtime vérifie si l'image existe localement
+3. Si elle n'existe pas, il contacte `https://registry-1.docker.io`
+4. Il télécharge les différentes couches (layers) de l'image
+5. Il extrait et assemble l'image
+6. Il crée et démarre le conteneur
+
+**Schéma du flux complet :**
+
+```
+Vous (kubectl)
+    │
+    ▼
+┌───────────────────────────────────────────┐
+│      Cluster Kubernetes                   │
+│                                          │
+│  API Server → etcd                       │
+│       ↓                                  │
+│  Deployment Controller                   │
+│       ↓                                  │
+│  ReplicaSet Controller                   │
+│       ↓                                  │
+│  Scheduler                               │
+│       ↓                                  │
+│  ┌────────────────────────┐             │
+│  │  Nœud (minikube)       │             │
+│  │                        │             │
+│  │  Kubelet               │             │
+│  │    ↓                   │             │
+│  │  Container Runtime     │             │
+│  └────────┬───────────────┘             │
+│           │                              │
+└───────────┼──────────────────────────────┘
+            │ Pull image
+            ▼
+    ┌─────────────────┐
+    │   Docker Hub    │  registry-1.docker.io
+    │  nginx:latest   │  (image officielle)
+    └─────────────────┘
+```
+
+#### Vérifier le processus en temps réel
+
+Vous pouvez observer ce qui se passe avec les commandes suivantes :
+
+```bash
+# Voir les événements du cluster en temps réel
+kubectl get events --watch
+
+# Voir les détails du déploiement d'un pod
+kubectl describe pod <pod-name>
+```
+
+Dans les événements, vous verrez :
+```
+Type    Reason     Message
+----    ------     -------
+Normal  Scheduled  Successfully assigned default/nginx-demo-xxx to minikube
+Normal  Pulling    Pulling image "nginx:latest"
+Normal  Pulled     Successfully pulled image "nginx:latest"
+Normal  Created    Created container nginx
+Normal  Started    Started container nginx
+```
+
+#### Autres registries disponibles
+
+Kubernetes peut télécharger des images depuis n'importe quel registry :
+
+```bash
+# Docker Hub (défaut)
+kubectl create deployment nginx --image=nginx:latest
+
+# Google Container Registry
+kubectl create deployment nginx --image=gcr.io/project/nginx:v1
+
+# Amazon ECR
+kubectl create deployment nginx --image=123456789.dkr.ecr.us-east-1.amazonaws.com/nginx:v1
+
+# Registry privé
+kubectl create deployment nginx --image=registry.example.com:5000/nginx:v1
+```
+
+#### Politique de pull d'image
+
+Le comportement de téléchargement dépend du tag et de la politique `imagePullPolicy` :
+
+- **Tag `latest`** : Kubernetes télécharge toujours l'image (`imagePullPolicy: Always`)
+- **Tag spécifique** (ex: `nginx:1.24`) : Kubernetes utilise l'image locale si disponible (`imagePullPolicy: IfNotPresent`)
+
+**💡 Astuce :** En production, évitez d'utiliser le tag `latest`. Préférez des versions spécifiques (ex: `nginx:1.24-alpine`) pour garantir la reproductibilité.
+
+### 3.3 Examiner le pod
 
 ```bash
 # Obtenir plus d'informations sur le pod
