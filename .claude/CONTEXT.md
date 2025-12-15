@@ -43,6 +43,29 @@ formation sur Kubernetes
 - 4 scripts de test automatisés opérationnels
 - CI/CD complète avec 10 jobs GitHub Actions
 
+### Session 2025-12-15 - Synchronisation Hook/Workflow
+
+**Objectif** : Synchroniser le session-start hook avec le workflow GitHub Actions
+
+**Problèmes identifiés** :
+- Hook manquait 2 vérifications d'APIs (`batch/v1beta1` et `networking.k8s.io/v1beta1`)
+- Couverture limitée aux tp*/ (dossier docs/ non vérifié)
+- Version minimale kubectl encore à v1.28 (au lieu de v1.29)
+
+**Corrections apportées** :
+1. ✅ Ajout détection `batch/v1beta1` (CronJob deprecated)
+2. ✅ Ajout détection `networking.k8s.io/v1beta1` (deprecated)
+3. ✅ Extension recherche YAML au dossier docs/
+4. ✅ Mise à jour version minimale kubectl: v1.28 → v1.29
+5. ✅ Ajout date de dernière mise à jour dans le hook
+6. ✅ Documentation mise à jour (AUTOMATION.md, CLAUDE.md, CONTEXT.md)
+
+**Résultats** :
+- **8 types d'APIs obsolètes** détectés (100% synchronisé avec GitHub Actions)
+- **135+ fichiers YAML** validés (tp1-tp9 + docs/)
+- **0 APIs dépréciées** détectées dans le projet
+- Hook et workflow parfaitement synchronisés
+
 ## Décisions importantes
 
 ### Architecture d'automatisation (2025-12-12)

@@ -9,6 +9,8 @@
 # 4. Run automated tests
 # 5. Report deprecations and outdated configurations
 #
+# Last updated: 2025-12-15
+#
 
 set -e
 
@@ -75,6 +77,14 @@ check_api_deprecations() {
         warnings="${warnings}\n  - autoscaling/v2beta2 is deprecated (use autoscaling/v2)"
     fi
 
+    if grep -q "apiVersion: batch/v1beta1" "$file" 2>/dev/null; then
+        warnings="${warnings}\n  - batch/v1beta1 CronJob is deprecated (use batch/v1)"
+    fi
+
+    if grep -q "apiVersion: networking.k8s.io/v1beta1" "$file" 2>/dev/null; then
+        warnings="${warnings}\n  - networking.k8s.io/v1beta1 is deprecated (use networking.k8s.io/v1)"
+    fi
+
     if [ -n "$warnings" ]; then
         echo -e "${RED}✗${NC} $file has deprecated APIs:$warnings"
         return 1
@@ -97,8 +107,8 @@ if check_command kubectl; then
 
     # Extract major.minor version
     major_minor=$(echo "$version" | grep -oP 'v\d+\.\d+' || echo "unknown")
-    if [[ "$major_minor" < "v1.28" ]] && [[ "$major_minor" != "unknown" ]]; then
-        echo -e "  ${YELLOW}⚠ kubectl version is older than 1.28, consider upgrading${NC}"
+    if [[ "$major_minor" < "v1.29" ]] && [[ "$major_minor" != "unknown" ]]; then
+        echo -e "  ${YELLOW}⚠ kubectl version is older than 1.29, consider upgrading${NC}"
     fi
 else
     tools_ok=false
@@ -178,8 +188,8 @@ yaml_errors=0
 yaml_warnings=0
 deprecated_apis=0
 
-# Find all YAML files
-yaml_files=$(find tp*/  -name "*.yaml" -o -name "*.yml" 2>/dev/null | grep -v node_modules || true)
+# Find all YAML files in tp*/ and docs/
+yaml_files=$(find tp*/ docs/ -name "*.yaml" -o -name "*.yml" 2>/dev/null | grep -v node_modules || true)
 total_files=$(echo "$yaml_files" | grep -c . || echo 0)
 
 echo "Found $total_files YAML manifest files"
