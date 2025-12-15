@@ -40,13 +40,17 @@ jobs:
 
       - name: Run yamllint on all TPs
         run: |
-          echo "Validating YAML files in all TPs..."
+          echo "Validating YAML files in all TPs and docs..."
           shopt -s nullglob
-          for tp in tp3 tp4 tp5 tp6 tp7 tp8 tp9; do
+          for tp in tp1 tp2 tp3 tp4 tp5 tp6 tp7 tp8 tp9 docs; do
             if [ -d "$tp" ]; then
               echo "Validating YAML files in $tp/"
               if compgen -G "$tp/*.yaml" > /dev/null; then
                 yamllint -c .yamllint.yml $tp/*.yaml || true
+              fi
+              # Also check subdirectories for docs
+              if [ "$tp" = "docs" ]; then
+                find docs -type f \( -name "*.yaml" -o -name "*.yml" \) -exec yamllint -c .yamllint.yml {} + 2>/dev/null || true
               fi
             fi
           done
@@ -64,8 +68,8 @@ jobs:
           echo "Checking for deprecated Kubernetes APIs..."
           deprecated=0
 
-          # Find all YAML files
-          yaml_files=$(find tp*/ -name "*.yaml" -o -name "*.yml" 2>/dev/null | grep -v node_modules || true)
+          # Find all YAML files in TPs and docs
+          yaml_files=$(find tp*/ docs/ -name "*.yaml" -o -name "*.yml" 2>/dev/null | grep -v node_modules || true)
 
           echo "Scanning $(echo "$yaml_files" | wc -l) YAML files..."
           echo ""
@@ -155,15 +159,23 @@ jobs:
         run: |
           echo "Validating all Kubernetes manifests with kubeconform..."
           shopt -s nullglob
-          for tp in tp3 tp4 tp5 tp6 tp7 tp8 tp9; do
+          for tp in tp1 tp2 tp3 tp4 tp5 tp6 tp7 tp8 tp9 docs; do
             if [ -d "$tp" ]; then
               echo ""
               echo "=== Validating $tp ==="
+              # Validate root level YAML files
               for file in $tp/*.yaml; do
                 [ -f "$file" ] || continue
                 echo "Validating $file"
                 kubeconform -summary -output json "$file" || echo "Warning: $file has validation issues"
               done
+              # Also check subdirectories for docs
+              if [ "$tp" = "docs" ]; then
+                find docs -type f \( -name "*.yaml" -o -name "*.yml" \) -print0 | while IFS= read -r -d '' file; do
+                  echo "Validating $file"
+                  kubeconform -summary -output json "$file" || echo "Warning: $file has validation issues"
+                done
+              fi
             fi
           done
 
@@ -171,15 +183,23 @@ jobs:
         run: |
           echo "Testing kubectl dry-run on all manifests..."
           shopt -s nullglob
-          for tp in tp3 tp4 tp5 tp6 tp7 tp8 tp9; do
+          for tp in tp1 tp2 tp3 tp4 tp5 tp6 tp7 tp8 tp9 docs; do
             if [ -d "$tp" ]; then
               echo ""
               echo "=== Dry-run validation for $tp ==="
+              # Validate root level YAML files
               for file in $tp/*.yaml; do
                 [ -f "$file" ] || continue
                 echo "Dry-run: $file"
                 kubectl apply --dry-run=client -f "$file" || echo "Warning: $file failed dry-run"
               done
+              # Also check subdirectories for docs
+              if [ "$tp" = "docs" ]; then
+                find docs -type f \( -name "*.yaml" -o -name "*.yml" \) -print0 | while IFS= read -r -d '' file; do
+                  echo "Dry-run: $file"
+                  kubectl apply --dry-run=client -f "$file" || echo "Warning: $file failed dry-run"
+                done
+              fi
             fi
           done
 
