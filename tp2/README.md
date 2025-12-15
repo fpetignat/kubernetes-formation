@@ -291,6 +291,321 @@ spec:
 5. Consultez l'historique : `kubectl rollout history deployment/rolling-deployment`
 6. Effectuez un rollback : `kubectl rollout undo deployment/rolling-deployment`
 
+### 3.3 Historisation des versions (Revision History)
+
+Kubernetes maintient automatiquement un historique des révisions de vos Deployments. Cet historique vous permet de :
+- **Consulter** les changements appliqués au fil du temps
+- **Revenir** à une version antérieure en cas de problème
+- **Auditer** les modifications apportées
+
+#### 3.3.1 Consulter l'historique des révisions
+
+```bash
+# Afficher l'historique complet d'un deployment
+kubectl rollout history deployment/rolling-deployment
+
+# Résultat exemple :
+# REVISION  CHANGE-CAUSE
+# 1         <none>
+# 2         kubectl set image deployment/rolling-deployment app=nginx:1.25
+# 3         kubectl set image deployment/rolling-deployment app=nginx:1.24
+```
+
+**Astuce** : Pour que la colonne `CHANGE-CAUSE` soit remplie automatiquement, utilisez l'annotation `kubernetes.io/change-cause` :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rolling-deployment
+  annotations:
+    kubernetes.io/change-cause: "Déploiement initial avec nginx 1.24"
+spec:
+  # ... reste de la configuration
+```
+
+Ou ajoutez-la lors de l'application :
+```bash
+kubectl apply -f deployment.yaml --record  # ⚠️ Option deprecated mais encore utilisée
+# Ou mieux, utilisez l'annotation directement dans le manifest
+```
+
+#### 3.3.2 Détails d'une révision spécifique
+
+Pour voir les détails d'une révision particulière :
+
+```bash
+# Afficher les détails de la révision 2
+kubectl rollout history deployment/rolling-deployment --revision=2
+
+# Résultat : affiche la configuration complète du Deployment à cette révision
+```
+
+Cette commande vous montre :
+- La configuration complète du Pod template
+- Les images utilisées
+- Les variables d'environnement
+- Les annotations et labels
+
+#### 3.3.3 Le paramètre `revisionHistoryLimit`
+
+Par défaut, Kubernetes conserve les **10 dernières révisions** d'un Deployment. Ce nombre est configurable via le paramètre `revisionHistoryLimit` dans le spec du Deployment.
+
+**Exemple avec limite d'historique personnalisée** :
+
+Créer `05b-deployment-revision-history.yaml` :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-with-history
+  annotations:
+    kubernetes.io/change-cause: "Déploiement initial v1.0"
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5  # Conserve seulement les 5 dernières révisions
+
+  selector:
+    matchLabels:
+      app: history-app
+
+  template:
+    metadata:
+      labels:
+        app: history-app
+        version: v1.0
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.24
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+```
+
+**Impact de `revisionHistoryLimit` :**
+
+| Valeur | Comportement | Cas d'usage |
+|--------|--------------|-------------|
+| `0` | Aucun historique conservé | ❌ Déconseillé - impossible de faire un rollback |
+| `1-3` | Historique minimal | Environnements de dev/test avec peu d'espace |
+| `5-10` | Historique standard | ⭐ Recommandé pour la plupart des cas |
+| `15-20` | Historique étendu | Production critique avec besoin d'audit |
+| `>20` | Historique très étendu | ⚠️ Peut consommer beaucoup de ressources etcd |
+
+#### 3.3.4 Exercice pratique : Gestion de l'historique
+
+**Exercice 5b : Manipuler l'historique des révisions**
+
+1. **Créez le deployment avec historique limité** :
+   ```bash
+   kubectl apply -f 05b-deployment-revision-history.yaml
+   ```
+
+2. **Effectuez plusieurs mises à jour** en changeant l'annotation `change-cause` :
+   ```bash
+   # Mise à jour 1
+   kubectl set image deployment/app-with-history app=nginx:1.25
+   kubectl annotate deployment/app-with-history \
+     kubernetes.io/change-cause="Mise à jour vers nginx 1.25" --overwrite
+
+   # Mise à jour 2
+   kubectl set image deployment/app-with-history app=nginx:1.26
+   kubectl annotate deployment/app-with-history \
+     kubernetes.io/change-cause="Mise à jour vers nginx 1.26" --overwrite
+
+   # Mise à jour 3
+   kubectl set image deployment/app-with-history app=nginx:alpine
+   kubectl annotate deployment/app-with-history \
+     kubernetes.io/change-cause="Migration vers nginx alpine" --overwrite
+   ```
+
+3. **Consultez l'historique** :
+   ```bash
+   kubectl rollout history deployment/app-with-history
+   ```
+
+   Résultat attendu :
+   ```
+   REVISION  CHANGE-CAUSE
+   1         Déploiement initial v1.0
+   2         Mise à jour vers nginx 1.25
+   3         Mise à jour vers nginx 1.26
+   4         Migration vers nginx alpine
+   ```
+
+4. **Examinez une révision spécifique** :
+   ```bash
+   kubectl rollout history deployment/app-with-history --revision=2
+   ```
+
+5. **Revenez à une révision précédente** :
+   ```bash
+   # Revenir à la révision 2 (nginx:1.25)
+   kubectl rollout undo deployment/app-with-history --to-revision=2
+
+   # Vérifier que le rollback s'est bien effectué
+   kubectl rollout history deployment/app-with-history
+   kubectl describe deployment app-with-history | grep Image
+   ```
+
+6. **Testez la limite d'historique** :
+   ```bash
+   # Effectuez 10 nouvelles mises à jour
+   for i in {1..10}; do
+     kubectl set image deployment/app-with-history app=nginx:1.24
+     kubectl set image deployment/app-with-history app=nginx:1.25
+   done
+
+   # Vérifiez que seules les 5 dernières révisions sont conservées
+   kubectl rollout history deployment/app-with-history
+   # Vous devriez voir seulement 5 révisions
+   ```
+
+#### 3.3.5 Modifier la limite d'historique d'un Deployment existant
+
+Pour modifier `revisionHistoryLimit` sur un Deployment existant :
+
+**Méthode 1 : Via kubectl patch**
+```bash
+kubectl patch deployment rolling-deployment \
+  -p '{"spec":{"revisionHistoryLimit":15}}'
+```
+
+**Méthode 2 : Via kubectl edit**
+```bash
+kubectl edit deployment rolling-deployment
+# Modifiez la ligne revisionHistoryLimit dans l'éditeur
+```
+
+**Méthode 3 : Via le fichier YAML**
+```bash
+# Modifiez le fichier YAML en ajoutant/changeant revisionHistoryLimit
+# Puis réappliquez :
+kubectl apply -f deployment.yaml
+```
+
+#### 3.3.6 Bonnes pratiques pour l'historique
+
+✅ **Recommandations** :
+
+1. **Définir une limite appropriée** selon l'environnement :
+   ```yaml
+   # Développement
+   revisionHistoryLimit: 3
+
+   # Staging
+   revisionHistoryLimit: 5
+
+   # Production
+   revisionHistoryLimit: 10
+   ```
+
+2. **Toujours documenter les changements** avec `change-cause` :
+   ```yaml
+   metadata:
+     annotations:
+       kubernetes.io/change-cause: "Fix bug #1234 - correction du timeout"
+   ```
+
+3. **Surveiller l'utilisation d'etcd** :
+   ```bash
+   # Vérifier la taille totale des révisions
+   kubectl get replicasets -l app=history-app
+   ```
+
+4. **Nettoyer les anciennes révisions manuellement** si nécessaire :
+   ```bash
+   # Réduire temporairement la limite pour forcer le nettoyage
+   kubectl patch deployment app-with-history -p '{"spec":{"revisionHistoryLimit":2}}'
+
+   # Les anciennes révisions seront automatiquement supprimées
+   ```
+
+5. **Automatiser les rollbacks avec des critères** :
+   - Utiliser des health checks (liveness/readiness probes)
+   - Mettre en place des alertes de monitoring
+   - Considérer l'utilisation de Flagger pour les rollbacks automatiques
+
+❌ **À éviter** :
+
+- `revisionHistoryLimit: 0` en production (impossible de rollback)
+- Valeurs trop élevées (>20) sans justification (consommation mémoire etcd)
+- Négliger les annotations `change-cause` (historique illisible)
+- Effectuer trop de déploiements successifs sans validation
+
+#### 3.3.7 Cas d'usage avancés
+
+**Stratégie de rollback automatique avec timeout** :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auto-rollback-app
+spec:
+  replicas: 3
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600  # Si le déploiement prend > 10 min, il est marqué comme failed
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0  # Zero downtime
+
+  selector:
+    matchLabels:
+      app: auto-rollback
+
+  template:
+    metadata:
+      labels:
+        app: auto-rollback
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.24
+        readinessProbe:  # Crucial pour détecter les déploiements problématiques
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 3
+```
+
+**Monitoring des révisions** :
+
+```bash
+# Créer un script de surveillance
+cat > watch-revisions.sh << 'EOF'
+#!/bin/bash
+DEPLOYMENT=$1
+
+while true; do
+  echo "=== $(date) ==="
+  echo "Révisions actuelles :"
+  kubectl rollout history deployment/$DEPLOYMENT
+  echo ""
+  echo "Statut du déploiement :"
+  kubectl rollout status deployment/$DEPLOYMENT
+  echo "================================"
+  sleep 30
+done
+EOF
+
+chmod +x watch-revisions.sh
+./watch-revisions.sh rolling-deployment
+```
+
 ## Partie 4 : Services - Exposition des applications
 
 ### 4.1 Service ClusterIP
