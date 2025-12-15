@@ -20,13 +20,13 @@ Le hook s'exécute automatiquement au début de chaque session Claude et effectu
 ### ✅ Vérifications effectuées
 
 #### 1. Versions des outils Kubernetes
-- **kubectl** : Vérifie la version (recommandé >= 1.28)
+- **kubectl** : Vérifie la version (recommandé >= 1.29)
 - **minikube** : Détecte la présence et la version
 - **helm** : Requis pour TP6
 - **yq, yamllint** : Outils de validation YAML
 
 **Alertes** :
-- ⚠️ Si kubectl < v1.28 → recommandation de mise à jour
+- ⚠️ Si kubectl < v1.29 → recommandation de mise à jour
 - ⚠️ Si outils manquants → liste des installations nécessaires
 
 #### 2. État du cluster Kubernetes
@@ -42,10 +42,11 @@ Le hook s'exécute automatiquement au début de chaque session Claude et effectu
 **Syntaxe YAML** :
 - Validation Python de tous les fichiers .yaml/.yml
 - Détection des erreurs de syntaxe
-- Total : ~124 fichiers validés
+- Couverture : tp1-tp9 + docs/
+- Total : ~135 fichiers validés
 
 **APIs Kubernetes dépréciées** :
-Le hook détecte automatiquement les APIs obsolètes :
+Le hook détecte automatiquement **8 types d'APIs obsolètes** (synchronisé avec GitHub Actions) :
 
 | API Dépréciée | Statut | Remplacement |
 |---------------|--------|--------------|
@@ -57,6 +58,8 @@ Le hook détecte automatiquement les APIs obsolètes :
 | `autoscaling/v2beta2` | ⚠️ Déprécié | `autoscaling/v2` |
 | `batch/v1beta1` (CronJob) | ⚠️ Déprécié | `batch/v1` |
 | `networking.k8s.io/v1beta1` | ⚠️ Déprécié | `networking.k8s.io/v1` |
+
+**Note** : Dernière synchronisation hook/workflow : 2025-12-15
 
 #### 4. Vérification GitHub Actions
 - Vérifie si les workflows sont déployés
@@ -261,13 +264,13 @@ Ajoutez au README :
 
 ## 📊 Métriques actuelles
 
-**État du projet au 2025-12-12** :
-- ✅ 124 manifests YAML validés
+**État du projet au 2025-12-15** :
+- ✅ 135+ manifests YAML validés (tp1-tp9 + docs/)
 - ✅ 0 APIs dépréciées détectées
-- ✅ 56 fichiers Markdown
+- ✅ 63 fichiers Markdown
 - ✅ 9 TPs complets
-- ✅ 4 scripts de test automatisés
-- ✅ 10 jobs GitHub Actions
+- ✅ 7 scripts de test automatisés
+- ✅ 12 jobs GitHub Actions (incluant test-tp1, test-tp2)
 
 ## 🎯 Règles de qualité
 

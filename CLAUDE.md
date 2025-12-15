@@ -24,15 +24,15 @@ Formation complète sur Kubernetes avec :
 
 ## État actuel du projet
 
-**Dernière mise à jour** : 2025-12-12
+**Dernière mise à jour** : 2025-12-15
 
 **Statistiques** :
-- ✅ 124 manifests YAML validés
+- ✅ 135+ manifests YAML validés (tp1-tp9 + docs/)
 - ✅ 0 APIs dépréciées détectées
-- ✅ 56 fichiers Markdown
+- ✅ 63 fichiers Markdown
 - ✅ 9 TPs complets
-- ✅ 4 scripts de test automatisés (TP3, TP5, TP8, TP9)
-- ✅ 10 jobs GitHub Actions
+- ✅ 7 scripts de test automatisés (TP1, TP2, TP5, TP6, TP7, TP8, TP9)
+- ✅ 12 jobs GitHub Actions
 
 **Stack technique** :
 - Kubernetes 1.29.0
@@ -44,19 +44,21 @@ Formation complète sur Kubernetes avec :
 
 ### Session-Start Hook
 Le hook `.claude/hooks/session-start.sh` s'exécute automatiquement et vérifie :
-1. ✅ Versions des outils Kubernetes (kubectl, minikube, helm)
+1. ✅ Versions des outils Kubernetes (kubectl >= v1.29, minikube, helm)
 2. ✅ État du cluster Kubernetes
-3. ✅ Validation syntaxe de tous les YAML
-4. ✅ Détection des APIs dépréciées/supprimées
+3. ✅ Validation syntaxe de tous les YAML (tp1-tp9 + docs/)
+4. ✅ Détection de 8 types d'APIs dépréciées/supprimées (synchronisé avec GitHub Actions)
 5. ✅ Vérification des versions GitHub Actions
 6. ✅ Liste des scripts de test disponibles
 7. ✅ Statistiques du projet
 
+**Dernière mise à jour du hook** : 2025-12-15
+
 ### GitHub Actions CI/CD
-Workflow `.github/workflows/test-kubernetes-manifests.yml` avec 10 jobs :
+Workflow `.github/workflows/test-kubernetes-manifests.yml` avec 12 jobs :
 - Validation YAML (syntaxe + schémas Kubernetes)
-- Détection d'APIs obsolètes
-- Tests d'intégration (TP3, TP5, TP8, TP9)
+- Détection de 8 types d'APIs obsolètes
+- Tests d'intégration (TP1, TP2, TP3, TP4, TP5, TP6, TP7, TP8, TP9)
 - Scan de sécurité avec Trivy
 - Validation des README
 
