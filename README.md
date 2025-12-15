@@ -87,6 +87,7 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 - [Structure du projet](#structure-du-projet)
 - [Commandes kubectl essentielles](#commandes-kubectl-essentielles)
 - **[⌨️ Référence kubectl, kubeadm, minikube](docs/KUBECTL_KUBEADM_MINIKUBE_REFERENCE.md)** - Guide complet des commandes essentielles et contextes d'utilisation
+- **[🚀 Tips & Tricks Kubernetes](docs/TIPS_AND_TRICKS.md)** - Astuces, bonnes pratiques et techniques avancées pour être plus productif
 - **[💻 Guide d'installation Windows](docs/WINDOWS_SETUP.md)** - Installation complète de Kubernetes sur Windows (Minikube, kubeadm, WSL2)
 - **[📘 Guide Jobs et CronJobs](docs/JOBS_CRONJOBS.md)** - Guide complet sur les tâches batch et planifiées
 - **[🔧 Guide kubeadm Setup](docs/KUBEADM_SETUP.md)** - Installation d'un cluster multi-nœuds avec kubeadm
