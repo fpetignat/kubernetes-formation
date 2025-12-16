@@ -66,6 +66,61 @@ formation sur Kubernetes
 - **0 APIs dépréciées** détectées dans le projet
 - Hook et workflow parfaitement synchronisés
 
+### Session 2025-12-16 - Correction Prérequis StorageClass TP2
+
+**Objectif** : Corriger un problème pédagogique critique dans le TP2 exercice 10
+
+**Problème identifié** :
+- TP2 exercice 10 (WordPress) utilise des PersistentVolumeClaim **sans expliquer les prérequis**
+- ✅ **Minikube** : Fonctionne automatiquement (StorageClass `standard` pré-configurée)
+- ❌ **Kubeadm** : **Échoue complètement** (aucune StorageClass par défaut)
+- Les étudiants sur kubeadm obtiennent des PVC en état "Pending" sans explication
+- Le TP3 (qui vient APRÈS) explique bien les StorageClass, mais trop tard
+
+**Analyse de l'impact** :
+- Exercice 10 : Application WordPress + MySQL (2 PVC requis)
+- Sans StorageClass, les pods ne peuvent pas démarrer
+- Erreur frustrante et difficile à diagnostiquer pour les débutants
+- Incohérence pédagogique : on utilise avant d'expliquer
+
+**Corrections apportées** :
+1. ✅ Ajout section complète **8.0 Prérequis : Configuration du Stockage Dynamique**
+2. ✅ Explication différence Minikube vs Kubeadm
+3. ✅ Instructions installation local-path-provisioner pour kubeadm
+4. ✅ Commandes de vérification et de test de la configuration
+5. ✅ Script de test complet (créer PVC test → pod → vérifier binding)
+6. ✅ Tableau récapitulatif des environnements
+7. ✅ Explications sur limitations du stockage local
+8. ✅ Références vers TP3 pour solutions de production
+
+**Contenu de la section ajoutée** :
+- **8.0.1** : Vérifier la configuration du stockage
+- **8.0.2** : Configuration spécifique Minikube / Kubeadm
+- **8.0.3** : Test complet de la configuration (PVC + Pod)
+- **8.0.4** : Tableau récapitulatif des environnements
+
+**Installation local-path-provisioner** (pour kubeadm) :
+```bash
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.26/deploy/local-path-storage.yaml
+kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+```
+
+**Bénéfices** :
+- ✅ TP2 devient autonome (pas besoin de lire TP3)
+- ✅ Expérience utilisateur cohérente Minikube et Kubeadm
+- ✅ Évite la frustration des PVC "Pending"
+- ✅ Explications pédagogiques sur le stockage Kubernetes
+- ✅ Commandes de débogage en cas de problème
+
+**Fichiers modifiés** :
+- `tp2/README.md` : +175 lignes (section 8.0 complète)
+
+**Tests recommandés** :
+- [ ] Tester exercice 10 sur cluster Minikube fraîchement créé
+- [ ] Tester exercice 10 sur cluster Kubeadm sans StorageClass
+- [ ] Tester exercice 10 sur cluster Kubeadm avec local-path-provisioner
+- [ ] Vérifier que les instructions de débogage sont correctes
+
 ## Décisions importantes
 
 ### Architecture d'automatisation (2025-12-12)

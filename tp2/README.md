@@ -2115,6 +2115,180 @@ spec:
 
 ## Partie 8 : Exercices pratiques complets
 
+### 8.0 Prérequis : Configuration du Stockage Dynamique
+
+**⚠️ IMPORTANT** : Les exercices de cette section utilisent des **PersistentVolumeClaim (PVC)** qui nécessitent une **StorageClass** configurée dans votre cluster.
+
+#### 8.0.1 Vérifier la configuration du stockage
+
+Avant de commencer, vérifiez que votre cluster dispose d'une StorageClass par défaut :
+
+```bash
+# Vérifier les StorageClass disponibles
+kubectl get storageclass
+
+# Vous devriez voir au moins une StorageClass avec (default) à côté
+```
+
+**Résultat attendu :**
+```
+NAME                 PROVISIONER                RECLAIMPOLICY   VOLUMEBINDINGMODE
+standard (default)   k8s.io/minikube-hostpath   Delete          Immediate
+```
+
+#### 8.0.2 Configuration spécifique par environnement
+
+##### 🎯 Avec Minikube (Prêt à l'emploi)
+
+**Minikube est déjà configuré !** La StorageClass `standard` est automatiquement disponible avec le provisioner `k8s.io/minikube-hostpath`.
+
+```bash
+# Vérifier (déjà configuré)
+kubectl get storageclass standard
+
+# Résultat attendu :
+# NAME                 PROVISIONER                RECLAIMPOLICY
+# standard (default)   k8s.io/minikube-hostpath   Delete
+```
+
+✅ **Vous pouvez passer directement à l'exercice 10.**
+
+##### 🔧 Avec Kubeadm (Configuration requise)
+
+**Attention !** Un cluster kubeadm "vanilla" **N'A PAS** de StorageClass par défaut. Vous devez installer un provisioner de stockage.
+
+**Vérifier l'absence de StorageClass :**
+```bash
+kubectl get storageclass
+# Résultat probable : No resources found
+```
+
+**Solution : Installer local-path-provisioner**
+
+Le [local-path-provisioner](https://github.com/rancher/local-path-provisioner) de Rancher est une solution simple et efficace pour le stockage local :
+
+```bash
+# 1. Installer le provisioner
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.26/deploy/local-path-storage.yaml
+
+# 2. Attendre que le déploiement soit prêt
+kubectl wait --namespace local-path-storage \
+  --for=condition=ready pod \
+  --selector=app=local-path-provisioner \
+  --timeout=90s
+
+# 3. Définir comme StorageClass par défaut
+kubectl patch storageclass local-path \
+  -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+
+# 4. Vérifier la configuration
+kubectl get storageclass
+```
+
+**Résultat attendu :**
+```
+NAME                   PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION
+local-path (default)   rancher.io/local-path   Delete          WaitForFirstConsumer   false
+```
+
+**Explication des paramètres :**
+- **Provisioner** : `rancher.io/local-path` crée automatiquement des répertoires locaux sur les nœuds
+- **ReclaimPolicy: Delete** : Les données sont supprimées quand le PVC est détruit
+- **VolumeBindingMode: WaitForFirstConsumer** : Le volume n'est créé que lorsqu'un pod l'utilise (optimise le placement)
+- **Chemin de stockage par défaut** : `/opt/local-path-provisioner/` sur chaque nœud
+
+**Limitations à connaître :**
+- ⚠️ Les données sont stockées localement sur un seul nœud
+- ⚠️ Pas de haute disponibilité (si le nœud tombe, les données sont perdues)
+- ⚠️ Pas de support ReadWriteMany (RWX)
+- ✅ Convient pour le développement, les tests et les applications avec ReadWriteOnce (RWO)
+
+**Alternative pour la production :** Pour un environnement de production on-premise, considérez des solutions comme :
+- **Longhorn** : Stockage distribué avec réplication (voir TP3)
+- **Ceph/Rook** : Stockage objet et block distribué
+- **NFS** : Pour le partage de fichiers (ReadWriteMany)
+
+#### 8.0.3 Tester la configuration
+
+Une fois la StorageClass configurée, testez-la rapidement :
+
+```bash
+# Créer un PVC de test
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+EOF
+
+# Vérifier le statut (doit être Pending ou Bound)
+kubectl get pvc test-pvc
+
+# Créer un pod utilisant ce PVC
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod
+spec:
+  containers:
+  - name: test
+    image: busybox
+    command: ["sleep", "3600"]
+    volumeMounts:
+    - name: test-storage
+      mountPath: /data
+  volumes:
+  - name: test-storage
+    persistentVolumeClaim:
+      claimName: test-pvc
+EOF
+
+# Attendre que le pod soit prêt
+kubectl wait --for=condition=ready pod/test-pod --timeout=60s
+
+# Vérifier que le PVC est maintenant Bound
+kubectl get pvc test-pvc
+
+# Le statut doit être : STATUS = Bound
+
+# Nettoyer
+kubectl delete pod test-pod
+kubectl delete pvc test-pvc
+```
+
+**Résultat attendu :**
+```
+NAME       STATUS   VOLUME                                     CAPACITY   ACCESS MODES
+test-pvc   Bound    pvc-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx   100Mi      RWO
+```
+
+✅ **Si le PVC est en état "Bound", votre configuration est correcte !**
+
+❌ **Si le PVC reste en "Pending"**, vérifiez :
+1. Qu'une StorageClass par défaut existe : `kubectl get storageclass`
+2. Les logs du provisioner :
+   - Minikube : `kubectl logs -n kube-system -l component=storage-provisioner`
+   - Kubeadm (local-path) : `kubectl logs -n local-path-storage -l app=local-path-provisioner`
+
+#### 8.0.4 Récapitulatif
+
+| Environnement | StorageClass par défaut | Action requise |
+|---------------|-------------------------|----------------|
+| **Minikube** | ✅ Oui (`standard`) | Aucune |
+| **Kubeadm** | ❌ Non | Installer local-path-provisioner |
+| **Cloud (EKS, GKE, AKS)** | ✅ Oui (propre au provider) | Aucune (généralement) |
+
+**Vous êtes maintenant prêt pour l'exercice 10 !** 🚀
+
+---
+
 ### Exercice 10 : Application complète WordPress
 
 Créez une application WordPress avec MySQL en écrivant les manifests pour :
