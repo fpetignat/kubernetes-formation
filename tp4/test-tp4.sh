@@ -4,7 +4,8 @@
 # Ce script teste tous les composants du TP4 : Metrics Server, Prometheus, Grafana, HPA
 # Usage: ./test-tp4.sh
 
-set -e
+# Note: Ne pas utiliser 'set -e' car les fonctions de test utilisent 'return 1'
+# et nous voulons continuer même si un test échoue
 
 # Couleurs pour l'affichage
 RED='\033[0;31m'
@@ -592,8 +593,15 @@ if [ "$1" == "cleanup" ]; then
     exit 0
 fi
 
-# Gérer Ctrl+C
-trap cleanup EXIT INT TERM
+# Gérer Ctrl+C (mais pas EXIT pour éviter cleanup automatique en fin normale)
+trap cleanup INT TERM
 
 # Exécuter le script
 main
+
+# Retourner le code approprié
+if [ $TESTS_FAILED -eq 0 ]; then
+    exit 0
+else
+    exit 1
+fi
