@@ -156,6 +156,51 @@ kubectl top nodes
 # Minimum recommandé : 4 Go de RAM libre
 ```
 
+### 1.4 (Optionnel) Construire l'image Docker Backend
+
+**Par défaut**, le deployment backend utilise `python:3.11-slim` et installe les dépendances à la volée.
+
+**Pour de meilleures performances**, vous pouvez construire une image Docker optimisée :
+
+```bash
+cd tp10
+
+# Construire l'image
+./build-image.sh latest
+
+# Charger l'image dans Minikube
+minikube image load taskflow-backend-api:latest
+
+# Vérifier que l'image est chargée
+minikube image ls | grep taskflow
+```
+
+**Ensuite**, modifier `09-backend-deployment.yaml` :
+```yaml
+containers:
+- name: api
+  image: taskflow-backend-api:latest  # Image construite localement
+  imagePullPolicy: Never              # Ne pas chercher sur Docker Hub
+```
+
+**Avantages de l'image pré-construite** :
+- ✅ Démarrage plus rapide des pods (dépendances déjà installées)
+- ✅ Image plus légère (~200 MB vs ~500 MB avec installation à la volée)
+- ✅ Moins de CPU/RAM utilisés au démarrage
+- ✅ Conforme aux bonnes pratiques de production
+
+**Structure des fichiers** :
+```
+tp10/
+├── Dockerfile              # Définition de l'image
+├── requirements.txt        # Dépendances Python
+├── app.py                  # Code de l'application Flask
+├── build-image.sh          # Script de build
+└── .dockerignore          # Fichiers à exclure
+```
+
+**Note** : Si vous ne construisez pas l'image, le deployment utilisera `python:3.11-slim` par défaut.
+
 ## 📦 Partie 2 : Déploiement de la base de données PostgreSQL avec initContainer
 
 ### 2.1 Comprendre l'objectif
@@ -280,12 +325,12 @@ metadata:
     app: postgres
     tier: database
 spec:
-  replicas: 1
+  replicas: 1  # IMPORTANT : Une seule instance pour éviter la corruption de données
   selector:
     matchLabels:
       app: postgres
   strategy:
-    type: Recreate  # Important pour les bases de données
+    type: Recreate  # IMPORTANT : Arrêter l'ancien pod avant de démarrer le nouveau
   template:
     metadata:
       labels:
@@ -367,6 +412,26 @@ spec:
 - PostgreSQL exécute automatiquement les scripts dans `/docker-entrypoint-initdb.d/`
 - Les **1000 tâches** sont créées au premier démarrage
 - Le **PVC** garantit la persistance des données
+
+**⚠️ Important sur `replicas: 1` et `strategy: Recreate`** :
+
+**Pourquoi une seule replica ?**
+- PostgreSQL est une base de données **stateful** (avec état)
+- Plusieurs replicas écrivant sur le **même PVC** causeraient une **corruption de données**
+- PostgreSQL ne supporte pas nativement l'écriture multi-master
+- Pour la haute disponibilité, il faut configurer une réplication PostgreSQL complexe (streaming replication, patroni, etc.)
+
+**Pourquoi `strategy: Recreate` ?**
+- `Recreate` **arrête** l'ancien pod **avant** de démarrer le nouveau
+- Évite que 2 pods PostgreSQL tentent d'accéder au même PVC simultanément
+- Garantit qu'un seul pod écrit dans la base à la fois
+- Alternative : `RollingUpdate` causerait des erreurs car le nouveau pod ne pourrait pas démarrer tant que l'ancien utilise le volume
+
+**Pour la production** :
+- ✅ PostgreSQL en `replicas: 1` avec PVC pour un TP/dev
+- ✅ Pour la production : utiliser un **StatefulSet** avec réplication PostgreSQL
+- ✅ Ou utiliser un service managé (AWS RDS, Google Cloud SQL, Azure Database)
+- ❌ Ne JAMAIS mettre `replicas: 2+` avec un Deployment + PVC unique
 
 Appliquer :
 ```bash
@@ -567,7 +632,7 @@ spec:
     spec:
       containers:
       - name: api
-        image: aboigues/taskflow-api:latest  # Image Docker pré-construite
+        image: python:3.11-slim  # Image de base (ou taskflow-backend-api:latest si construite localement)
         ports:
         - containerPort: 5000
           name: http
