@@ -391,9 +391,12 @@ kubectl logs -f multi-log-pod -c cache
 
 # Astuce : Utiliser stern pour voir tous les logs
 # Installation de stern (optionnel)
-# wget https://github.com/stern/stern/releases/download/v1.27.0/stern_1.27.0_linux_amd64.tar.gz
-# tar xzf stern_1.27.0_linux_amd64.tar.gz
+# Télécharger la dernière version : https://github.com/stern/stern/releases/latest
+# Exemple pour Linux amd64 :
+# wget https://github.com/stern/stern/releases/latest/download/stern_linux_amd64.tar.gz
+# tar xzf stern_linux_amd64.tar.gz
 # sudo mv stern /usr/local/bin/
+# stern --version
 
 # Utilisation de stern (si installé)
 # stern multi-log-pod
