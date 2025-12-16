@@ -460,6 +460,14 @@ curl http://myapp.local
 
 ### 2.4 Ingress avec plusieurs services
 
+**Important** : Avant de continuer, supprimez les ressources précédentes pour éviter les conflits d'Ingress sur le même host :
+
+```bash
+# Supprimer les ressources de l'exercice précédent
+kubectl delete -f 01-app-deployment.yaml
+kubectl delete -f 02-ingress-simple.yaml
+```
+
 Créer `03-multi-service-ingress.yaml` :
 
 ```yaml
@@ -568,6 +576,13 @@ curl http://myapp.local/api
 
 **Exercice 6 : Configurer HTTPS**
 
+**Important** : Supprimez l'Ingress précédent pour éviter les conflits :
+
+```bash
+# Supprimer l'Ingress de l'exercice 2.4
+kubectl delete ingress multi-service-ingress
+```
+
 ```bash
 # Créer un certificat auto-signé
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
@@ -621,6 +636,22 @@ curl -k https://myapp.local
 
 ### 2.6 Ingress avancé avec annotations
 
+**Note importante sur la sécurité** : L'annotation `configuration-snippet` est désactivée par défaut dans les versions récentes de NGINX Ingress Controller pour des raisons de sécurité (risque d'injection de configuration). Cette section montre comment utiliser des annotations sûres.
+
+Créer d'abord un ConfigMap pour les headers personnalisés `05-custom-headers.yaml` :
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-headers
+  namespace: default
+data:
+  X-Custom-Header: "MyValue"
+  X-Application: "Kubernetes-Demo"
+  X-Environment: "Production"
+```
+
 Créer `05-ingress-advanced.yaml` :
 
 ```yaml
@@ -641,7 +672,7 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
-    # Custom headers
+    # Custom headers (méthode sécurisée)
     nginx.ingress.kubernetes.io/configuration-snippet: |
       more_set_headers "X-Custom-Header: MyValue";
 spec:
@@ -658,6 +689,68 @@ spec:
             port:
               number: 80
 ```
+
+**Si vous obtenez l'erreur "configuration-snippet annotation cannot be used"**, c'est normal ! Voici deux solutions :
+
+**Solution A : Approche sécurisée recommandée (sans configuration-snippet)**
+
+Supprimez l'annotation `configuration-snippet` et utilisez seulement les annotations sûres :
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: advanced-ingress
+  annotations:
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+    # Sticky sessions
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "route"
+    # CORS
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE"
+    # Timeouts
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: myapp.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: web-app-service
+            port:
+              number: 80
+```
+
+**Solution B : Activer l'annotation (usage pédagogique uniquement)**
+
+Pour les besoins de formation, vous pouvez activer les snippets dans le controller :
+
+```bash
+# Éditer le ConfigMap du controller
+kubectl edit configmap -n ingress-nginx ingress-nginx-controller
+
+# Ajouter cette ligne dans la section 'data:'
+allow-snippet-annotations: "true"
+
+# Redémarrer le controller
+kubectl rollout restart deployment -n ingress-nginx ingress-nginx-controller
+
+# Attendre que le controller soit prêt
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s
+```
+
+**⚠️ Avertissement** : L'option `allow-snippet-annotations: "true"` **NE DOIT PAS** être utilisée en production car elle représente un risque de sécurité.
 
 ## Partie 3 : CI/CD avec GitHub Actions
 
