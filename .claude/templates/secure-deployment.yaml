@@ -1,0 +1,123 @@
+# Template de Deployment Kubernetes Sécurisé
+# Copier ce template et l'adapter selon les besoins
+# Guide complet : .claude/SECURITY.md
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mon-app
+  namespace: mon-namespace
+  labels:
+    app: mon-app
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mon-app
+  template:
+    metadata:
+      labels:
+        app: mon-app
+        tier: backend
+    spec:
+      # ═══════════════════════════════════════════════════════
+      # SECURITY CONTEXT POD (OBLIGATOIRE)
+      # ═══════════════════════════════════════════════════════
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # À adapter selon l'image (nginx=101, postgres=70, redis=999)
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+      - name: mon-app
+        image: mon-image:latest
+
+        ports:
+        - containerPort: 8080
+          name: http
+
+        # ═══════════════════════════════════════════════════════
+        # SECURITY CONTEXT CONTAINER (OBLIGATOIRE)
+        # ═══════════════════════════════════════════════════════
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+
+        # ═══════════════════════════════════════════════════════
+        # ENVIRONMENT VARIABLES
+        # ═══════════════════════════════════════════════════════
+        env:
+        - name: EXAMPLE_VAR
+          value: "example-value"
+        # Pour les secrets, utiliser secretKeyRef :
+        # - name: DB_PASSWORD
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: mon-secret
+        #       key: password
+
+        # ═══════════════════════════════════════════════════════
+        # RESOURCES (OBLIGATOIRE)
+        # ═══════════════════════════════════════════════════════
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+        # ═══════════════════════════════════════════════════════
+        # HEALTH CHECKS (RECOMMANDÉ)
+        # ═══════════════════════════════════════════════════════
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 3
+
+        # ═══════════════════════════════════════════════════════
+        # VOLUMES (SI readOnlyRootFilesystem: true)
+        # ═══════════════════════════════════════════════════════
+        volumeMounts:
+        # OBLIGATOIRE : Volume pour /tmp
+        - name: tmp
+          mountPath: /tmp
+
+        # Ajouter d'autres volumes selon l'application :
+        # PostgreSQL : /var/run/postgresql
+        # Nginx : /var/cache/nginx, /var/run
+        # Python/pip : /home/nonroot
+        # Grafana : /var/lib/grafana, /var/log/grafana
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      # - name: autre-volume
+      #   emptyDir: {}
+
+# ═══════════════════════════════════════════════════════════════
+# VALIDATION AVANT COMMIT :
+# ═══════════════════════════════════════════════════════════════
+# 1. trivy config --severity HIGH,CRITICAL mon-deployment.yaml
+# 2. kubeconform -strict mon-deployment.yaml
+# 3. kubectl apply --dry-run=server -f mon-deployment.yaml
+# ═══════════════════════════════════════════════════════════════
