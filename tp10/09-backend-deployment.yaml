@@ -17,6 +17,13 @@ spec:
         app: backend-api
         tier: application
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
       - name: api
         image: python:3.11-slim
@@ -25,14 +32,22 @@ spec:
         - /bin/bash
         - -c
         - |
-          # Installer les dépendances
-          pip install --no-cache-dir flask psycopg2-binary redis gunicorn
+          # Installer les dépendances en mode utilisateur
+          pip install --user --no-cache-dir flask psycopg2-binary redis gunicorn
 
           # Lancer l'application
           exec gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 60 app:app
         ports:
         - containerPort: 5000
           name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
         env:
         - name: DATABASE_USER
           valueFrom:
@@ -44,12 +59,18 @@ spec:
             secretKeyRef:
               name: postgres-secret
               key: POSTGRES_PASSWORD
+        - name: HOME
+          value: /home/nonroot
         envFrom:
         - configMapRef:
             name: backend-config
         volumeMounts:
         - name: app-code
           mountPath: /app
+        - name: home
+          mountPath: /home/nonroot
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "128Mi"
@@ -74,3 +95,7 @@ spec:
       - name: app-code
         configMap:
           name: backend-app-code
+      - name: home
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}

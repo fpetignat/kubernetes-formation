@@ -16,6 +16,13 @@ spec:
         app: prometheus
     spec:
       serviceAccountName: prometheus
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
       - name: prometheus
         image: prom/prometheus:v2.48.0
@@ -26,11 +33,21 @@ spec:
         ports:
         - containerPort: 9090
           name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65534
+          capabilities:
+            drop:
+            - ALL
         volumeMounts:
         - name: config
           mountPath: /etc/prometheus
         - name: storage
           mountPath: /prometheus
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "512Mi"
@@ -38,6 +55,7 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "500m"
+
       volumes:
       - name: config
         configMap:
@@ -45,3 +63,5 @@ spec:
       - name: storage
         persistentVolumeClaim:
           claimName: prometheus-pvc
+      - name: tmp
+        emptyDir: {}

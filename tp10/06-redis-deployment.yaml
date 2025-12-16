@@ -17,6 +17,13 @@ spec:
         app: redis
         tier: cache
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
       - name: redis
         image: redis:7-alpine
@@ -29,6 +36,17 @@ spec:
         - "128mb"
         - --maxmemory-policy
         - "allkeys-lru"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 999
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: data
+          mountPath: /data
         resources:
           requests:
             memory: "64Mi"
@@ -48,3 +66,7 @@ spec:
             - ping
           initialDelaySeconds: 5
           periodSeconds: 5
+
+      volumes:
+      - name: data
+        emptyDir: {}

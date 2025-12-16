@@ -19,6 +19,13 @@ spec:
         app: postgres
         tier: database
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+
       initContainers:
       - name: init-db-schema
         image: postgres:16-alpine
@@ -29,9 +36,19 @@ spec:
           echo "Waiting for PostgreSQL to be ready..."
           sleep 10
           echo "InitContainer completed successfully"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 70
+          capabilities:
+            drop:
+            - ALL
         volumeMounts:
         - name: init-script
           mountPath: /docker-entrypoint-initdb.d
+        - name: tmp
+          mountPath: /tmp
         envFrom:
         - secretRef:
             name: postgres-secret
@@ -42,6 +59,14 @@ spec:
         ports:
         - containerPort: 5432
           name: postgres
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 70
+          capabilities:
+            drop:
+            - ALL
         envFrom:
         - secretRef:
             name: postgres-secret
@@ -51,6 +76,10 @@ spec:
           subPath: postgres
         - name: init-script
           mountPath: /docker-entrypoint-initdb.d
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /var/run/postgresql
         resources:
           requests:
             memory: "256Mi"
@@ -82,3 +111,7 @@ spec:
       - name: init-script
         configMap:
           name: postgres-init-script
+      - name: tmp
+        emptyDir: {}
+      - name: run
+        emptyDir: {}

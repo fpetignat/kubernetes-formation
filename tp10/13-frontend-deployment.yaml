@@ -17,15 +17,36 @@ spec:
         app: frontend
         tier: presentation
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
       - name: nginx
         image: nginx:1.25-alpine
         ports:
         - containerPort: 80
           name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 101
+          capabilities:
+            drop:
+            - ALL
         volumeMounts:
         - name: html
           mountPath: /usr/share/nginx/html
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "32Mi"
@@ -33,7 +54,14 @@ spec:
           limits:
             memory: "64Mi"
             cpu: "100m"
+
       volumes:
       - name: html
         configMap:
           name: frontend-html
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
