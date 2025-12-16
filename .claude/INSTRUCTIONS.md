@@ -18,6 +18,7 @@
 2. **Itération**: Chaque session doit partir de la dernière version sur GitHub
 3. **Documentation**: Maintenir la documentation à jour
 4. **Tests**: [Ajouter les règles de tests si applicable]
+5. **🔐 SÉCURITÉ KUBERNETES**: Appliquer SYSTÉMATIQUEMENT la checklist `.claude/SECURITY.md` dès la première itération
 
 ## Workflow à suivre à chaque session
 
@@ -137,6 +138,78 @@ git push origin main
 - [ ] CONTEXT.md est mis à jour
 - [ ] Le message de commit est clair
 - [ ] Aucun secret/token dans le code
+- [ ] 🔐 **Checklist sécurité Kubernetes appliquée** (voir `.claude/SECURITY.md`)
+
+## 🔐 Checklist Sécurité Kubernetes (OBLIGATOIRE pour manifests)
+
+**Avant de créer/modifier un manifest Kubernetes, TOUJOURS suivre :**
+
+### Étape 1 : Partir du template sécurisé
+Voir `.claude/SECURITY.md` section "TEMPLATE DE DEPLOYMENT SÉCURISÉ"
+
+### Étape 2 : SecurityContext - OBLIGATOIRE ✅
+```yaml
+# POD Level
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000  # UID non-root
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# CONTAINER Level
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+    - ALL
+```
+
+### Étape 3 : Volumes (si readOnlyRootFilesystem: true) ✅
+```yaml
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+volumes:
+  - name: tmp
+    emptyDir: {}
+```
+
+### Étape 4 : Resources - OBLIGATOIRE ✅
+```yaml
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
+```
+
+### Étape 5 : Validation AVANT commit ✅
+```bash
+# Scan de sécurité (0 vulnérabilité HIGH/CRITICAL attendu)
+trivy config --severity HIGH,CRITICAL <file>
+
+# Validation syntaxe
+kubeconform -strict <file>
+
+# Dry-run
+kubectl apply --dry-run=server -f <file>
+```
+
+**📖 Guide complet** : `.claude/SECURITY.md`
+**🎯 UIDs recommandés** : nginx=101, postgres=70, redis=999, grafana=472, prometheus=65534
+
+---
+
+## ⚠️ Rappel Important
+
+**30 vulnérabilités HIGH** ont été corrigées a posteriori dans le TP10.
+**Objectif** : 0 vulnérabilité dès la première itération en appliquant la checklist ci-dessus.
 
 ## Messages de commit standards
 
