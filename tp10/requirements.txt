@@ -1,0 +1,14 @@
+# Requirements pour TaskFlow Backend API
+
+# Web Framework
+flask==3.0.0
+gunicorn==21.2.0
+
+# Database
+psycopg2-binary==2.9.9
+
+# Cache
+redis==5.0.1
+
+# Utils (déjà inclus avec Flask mais explicite)
+werkzeug==3.0.1
