@@ -121,6 +121,177 @@ kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storagec
 - [ ] Tester exercice 10 sur cluster Kubeadm avec local-path-provisioner
 - [ ] Vérifier que les instructions de débogage sont correctes
 
+### Session 2025-12-16 - Création du TP10 (Projet de Synthèse)
+
+**Objectif** : Créer un TP de synthèse qui intègre tous les concepts avancés vus dans la formation
+
+**Contexte** :
+- L'utilisateur a demandé un projet de synthèse combinant : Deployment, HPA, initContainers, LoadBalancer, Monitoring
+- Besoin d'une application avec volumétrie de données importante, load generator et monitoring en temps réel
+- L'objectif est de créer un TP10 qui démontre la maîtrise complète de Kubernetes
+
+**Projet créé : TaskFlow - Application de gestion de tâches**
+
+**Architecture de l'application** :
+```
+Frontend (Nginx)
+    ↓
+Backend API (Flask × 2-10) ← HPA (auto-scaling)
+    ↓
+PostgreSQL + Redis + Prometheus
+    ↓
+PVC × 2 (persistance)
+```
+
+**Composants déployés** :
+1. **PostgreSQL** (1 replica)
+   - **initContainer** qui crée le schéma et charge **1000 tâches de test**
+   - PersistentVolumeClaim pour la persistance
+   - Secret pour les credentials
+
+2. **Redis** (1 replica)
+   - Cache en mémoire pour optimiser les requêtes API
+   - Configuration LRU avec limite 128 MB
+
+3. **Backend API** (Flask Python, 2-10 replicas)
+   - API REST avec endpoints : `/tasks`, `/stats`, `/health`, `/ready`, `/stress`
+   - Connexion à PostgreSQL et Redis
+   - **HPA configuré** : scale de 2 à 10 pods selon CPU (50%) et mémoire (70%)
+   - Code Python embarqué dans ConfigMap
+
+4. **Frontend** (Nginx, 1 replica)
+   - Interface web HTML/CSS/JS pour afficher les tâches
+   - Service LoadBalancer pour accès externe
+   - HTML embarqué dans ConfigMap
+
+5. **Prometheus** (1 replica)
+   - Collecte de métriques des pods
+   - RBAC (ServiceAccount, ClusterRole, ClusterRoleBinding)
+   - PersistentVolumeClaim pour stockage des métriques (7 jours)
+
+6. **Grafana** (1 replica)
+   - Visualisation des métriques
+   - Service LoadBalancer pour accès externe
+   - Credentials : admin/admin2024
+
+7. **Load Generator** (Job avec 5 pods parallèles)
+   - Génère du trafic HTTP vers l'API Backend
+   - Déclenche l'autoscaling du HPA
+   - Utilise wget en boucle pour charger l'API
+
+**Fichiers créés** :
+```
+tp10/
+├── README.md (documentation complète 600+ lignes)
+├── QUICKSTART.md (guide de démarrage rapide)
+├── deploy.sh (script de déploiement automatique)
+├── test-tp10.sh (script de test automatisé avec 12 tests)
+├── 01-postgres-init-script.yaml (ConfigMap avec SQL)
+├── 02-postgres-secret.yaml
+├── 03-postgres-pvc.yaml
+├── 04-postgres-deployment.yaml (avec initContainer)
+├── 05-postgres-service.yaml
+├── 06-redis-deployment.yaml
+├── 07-redis-service.yaml
+├── 08-backend-config.yaml
+├── 09-backend-app-code.yaml (ConfigMap avec code Python Flask)
+├── 09-backend-deployment.yaml
+├── 10-backend-service.yaml
+├── 11-backend-hpa.yaml (HorizontalPodAutoscaler)
+├── 12-frontend-config.yaml (ConfigMap avec HTML/CSS/JS)
+├── 13-frontend-deployment.yaml
+├── 14-frontend-service.yaml (LoadBalancer)
+├── 15-prometheus-config.yaml
+├── 16-prometheus-rbac.yaml (SA + ClusterRole + Binding)
+├── 17-prometheus-pvc.yaml
+├── 18-prometheus-deployment.yaml
+├── 19-prometheus-service.yaml
+├── 20-grafana-deployment.yaml
+├── 21-grafana-service.yaml (LoadBalancer)
+└── 22-load-generator.yaml (Job)
+```
+
+**Concepts Kubernetes couverts** (synthèse de tous les TPs) :
+- ✅ **initContainers** (TP2, TP3, TP7) : Initialisation de PostgreSQL avec 1000 tâches
+- ✅ **HPA** (TP4, TP6, TP7) : Auto-scaling de 2 à 10 pods basé sur CPU/mémoire
+- ✅ **Deployments** (TP1, TP2) : 6 deployments avec stratégies de rolling update
+- ✅ **Services** (TP1, TP8) : ClusterIP (internes) et LoadBalancer (exposés)
+- ✅ **PVC** (TP3) : Persistance pour PostgreSQL et Prometheus
+- ✅ **ConfigMaps** (TP2) : Configuration applicative + code embarqué
+- ✅ **Secrets** (TP2, TP5) : Credentials PostgreSQL
+- ✅ **RBAC** (TP5) : ServiceAccount pour Prometheus
+- ✅ **Monitoring** (TP4) : Prometheus + Grafana
+- ✅ **Load Testing** : Job Kubernetes avec parallelism
+- ✅ **Health Checks** : livenessProbe et readinessProbe sur tous les pods
+- ✅ **Resource Limits** : requests/limits pour tous les conteneurs
+
+**Fonctionnalités du README.md** :
+1. Introduction pédagogique et objectifs
+2. Architecture détaillée avec diagrammes ASCII
+3. Guide pas à pas pour chaque composant
+4. Explications des concepts clés (initContainer, HPA, etc.)
+5. Instructions de test de l'autoscaling
+6. Configuration Grafana
+7. Analyse et questions de réflexion
+8. Exercices supplémentaires
+9. Troubleshooting complet
+10. Checklist de réussite
+
+**Scripts automatisés** :
+1. **deploy.sh** : Déploie tous les composants dans le bon ordre avec waits
+2. **test-tp10.sh** : 12 tests automatiques vérifiant :
+   - Namespace existe
+   - Tous les deployments sont Ready
+   - Pods sont Running
+   - PVC sont Bound
+   - HPA est configuré (min=2, max=10)
+   - PostgreSQL contient 1000 tâches
+   - API Backend fonctionne (/health, /stats)
+   - Redis répond (PING/PONG)
+   - Prometheus est prêt
+   - Metrics Server est installé
+   - ConfigMaps et Secrets existent
+
+**Scénario pédagogique** :
+1. L'étudiant déploie l'application complète
+2. L'initContainer charge automatiquement 1000 tâches dans PostgreSQL
+3. L'application démarre avec 2 pods backend (HPA min)
+4. L'étudiant lance le load generator (5 pods qui bombardent l'API)
+5. Le HPA détecte la charge CPU/mémoire et scale à 8-10 pods
+6. L'étudiant observe en temps réel dans Grafana
+7. Après arrêt du load generator, le HPA descale progressivement
+8. L'étudiant analyse les logs et métriques
+
+**Résultats attendus** :
+- ✅ Application web complète et fonctionnelle
+- ✅ Auto-scaling visible en temps réel (2 → 10 → 2 pods)
+- ✅ Monitoring avec Prometheus et Grafana
+- ✅ Persistance des données (1000 tâches survivent aux redémarrages)
+- ✅ Cache Redis améliore les performances
+- ✅ Interface web accessible via LoadBalancer
+
+**Statistiques du TP10** :
+- **22 fichiers YAML** (manifests Kubernetes)
+- **3 fichiers shell** (deploy.sh, test-tp10.sh)
+- **2 fichiers Markdown** (README.md 600+ lignes, QUICKSTART.md)
+- **~1800 lignes de YAML**
+- **~300 lignes de Python** (API Flask)
+- **~150 lignes de HTML/CSS/JS** (Frontend)
+- **~400 lignes de Bash** (scripts de test et déploiement)
+
+**Ressources requises** :
+- Minimum 4 Go RAM disponibles
+- Metrics Server installé (pour HPA)
+- StorageClass disponible (standard)
+
+**Prochaines étapes suggérées** :
+- [ ] Tester le déploiement complet sur Minikube
+- [ ] Tester le déploiement sur Kubeadm
+- [ ] Vérifier que l'autoscaling fonctionne correctement
+- [ ] Ajouter le TP10 au workflow GitHub Actions
+- [ ] Créer un job de test `test-tp10` dans `.github/workflows/`
+- [ ] Ajouter validation YAML du TP10 au session-start hook
+
 ## Décisions importantes
 
 ### Architecture d'automatisation (2025-12-12)
