@@ -14,7 +14,9 @@
 
 ## Introduction
 
-**OpenBao** est un fork open-source de HashiCorp Vault, maintenu par la Linux Foundation. Il permet de gérer de manière sécurisée les secrets, les clés de chiffrement, et les certificats dans vos applications Kubernetes.
+**OpenBao** est un fork open-source de HashiCorp Vault, maintenu par la Linux Foundation (LF Edge). Il permet de gérer de manière sécurisée les secrets, les clés de chiffrement, et les certificats dans vos applications Kubernetes.
+
+> **Note :** Ce guide est à jour pour OpenBao 2.5.x (décembre 2025). Pour les versions plus anciennes, consultez la [documentation officielle versionnée](https://openbao.org/docs/).
 
 ### Pourquoi OpenBao ?
 
@@ -171,6 +173,11 @@ spec:
       serviceAccountName: openbao
       containers:
       - name: openbao
+        # Images officielles OpenBao disponibles sur plusieurs registres :
+        # - quay.io/openbao/openbao:latest (recommandé)
+        # - docker.io/openbao/openbao:latest
+        # - ghcr.io/openbao/openbao:latest
+        # - quay.io/openbao/openbao-ubi:latest (basé sur Red Hat UBI)
         image: quay.io/openbao/openbao:latest
         ports:
         - containerPort: 8200
@@ -498,16 +505,41 @@ spec:
 
 Pour une intégration plus native avec Kubernetes.
 
+**Prérequis :**
+- Kubernetes 1.30+ (version minimale testée)
+- Helm 3.6+
+
 **Installation du CSI driver :**
 
 ```bash
-# Installer le Secret Store CSI Driver
+# Installer le Secret Store CSI Driver (prérequis)
 helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+helm repo update
 helm install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
   --namespace kube-system
 
-# Installer le provider OpenBao
-kubectl apply -f https://raw.githubusercontent.com/openbao/openbao-csi-provider/main/deployment/openbao-csi-provider.yaml
+# Installer le provider OpenBao via Helm (méthode recommandée)
+helm repo add openbao https://openbao.github.io/openbao-helm
+helm repo update
+
+# Option 1 : Installer avec OpenBao server + CSI provider
+helm install openbao openbao/openbao \
+  --namespace openbao \
+  --set="csi.enabled=true"
+
+# Option 2 : Installer uniquement le CSI provider (si OpenBao déjà installé)
+helm install openbao openbao/openbao \
+  --namespace openbao \
+  --set "server.enabled=false" \
+  --set "injector.enabled=false" \
+  --set "csi.enabled=true"
+
+# Activer le mode debug si nécessaire (pour troubleshooting)
+# --set "csi.debug=true"
+
+# Vérifier l'installation
+kubectl get pods -n openbao -l app.kubernetes.io/name=openbao-csi-provider
+kubectl get daemonset -n csi openbao-csi-provider
 ```
 
 **Exemple d'utilisation :**
@@ -1630,12 +1662,25 @@ done
 
 ## Ressources supplémentaires
 
-- [Documentation officielle OpenBao](https://openbao.org/docs/)
-- [Repository GitHub OpenBao](https://github.com/openbao/openbao)
-- [OpenBao Helm Chart](https://github.com/openbao/openbao-helm)
-- [Secrets Store CSI Driver](https://secrets-store-csi-driver.sigs.k8s.io/)
-- [Kubernetes Auth Method](https://openbao.org/docs/auth/kubernetes/)
-- [Best Practices for Kubernetes Secrets](https://kubernetes.io/docs/concepts/security/secrets-good-practices/)
+### Documentation officielle
+- [Documentation OpenBao (version 2.5.x)](https://openbao.org/docs/) - Documentation complète et guide de référence
+- [Notes de version OpenBao 2.5.x](https://openbao.org/docs/release-notes/) - Dernières fonctionnalités et changements
+- [Kubernetes Platform Guide](https://openbao.org/docs/platform/k8s/) - Guide spécifique Kubernetes
+
+### Repositories GitHub
+- [OpenBao Core](https://github.com/openbao/openbao) - Code source principal
+- [OpenBao Helm Chart](https://github.com/openbao/openbao-helm) - Chart Helm officiel
+- [OpenBao CSI Provider](https://github.com/openbao/openbao-csi-provider) - Provider pour CSI Driver
+
+### Intégration Kubernetes
+- [Secrets Store CSI Driver](https://secrets-store-csi-driver.sigs.k8s.io/) - Driver CSI pour secrets
+- [OpenBao CSI Provider Documentation](https://openbao.org/docs/platform/k8s/csi/) - Documentation du provider CSI
+- [Kubernetes Auth Method](https://openbao.org/docs/auth/kubernetes/) - Authentification via ServiceAccount
+- [Agent Sidecar Injector](https://openbao.org/docs/platform/k8s/injector/) - Injection automatique de secrets
+
+### Bonnes pratiques
+- [Best Practices for Kubernetes Secrets](https://kubernetes.io/docs/concepts/security/secrets-good-practices/) - Guide officiel Kubernetes
+- [OpenBao Production Hardening](https://openbao.org/docs/internals/security/) - Sécurisation en production
 
 ---
 
