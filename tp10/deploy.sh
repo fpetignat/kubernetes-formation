@@ -90,6 +90,7 @@ echo ""
 
 # Déployer Grafana
 echo -e "${YELLOW}[7/8] Déploiement de Grafana${NC}"
+kubectl apply -f 20-grafana-datasource.yaml
 kubectl apply -f 20-grafana-deployment.yaml
 kubectl apply -f 21-grafana-service.yaml
 kubectl wait --for=condition=ready pod -l app=grafana -n $NAMESPACE --timeout=120s
