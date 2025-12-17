@@ -219,7 +219,7 @@ tolerations: []
 affinity: {}
 ```
 
-Modifier `my-app/templates/deployment.yaml` :
+Modifier `my-app/templates/deployment.yaml` (avec configurations de sécurité) :
 
 ```yaml
 apiVersion: apps/v1
@@ -240,10 +240,24 @@ spec:
       labels:
         {{- include "my-app.selectorLabels" . | nindent 8 }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: {{ .Chart.Name }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 101
+          capabilities:
+            drop:
+            - ALL
         ports:
         - name: http
           containerPort: 80
@@ -252,13 +266,50 @@ spec:
           httpGet:
             path: /
             port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /
             port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ```
+
+> **Note de sécurité** : Ce deployment inclut les bonnes pratiques de sécurité Kubernetes :
+> - `runAsNonRoot: true` - Exécution en tant qu'utilisateur non-root (nginx UID 101)
+> - `readOnlyRootFilesystem: true` - Système de fichiers racine en lecture seule
+> - Volumes `emptyDir` pour les répertoires nécessitant l'écriture (/tmp, /var/cache/nginx, /var/run)
+> - `allowPrivilegeEscalation: false` - Pas d'élévation de privilèges
+> - `capabilities: drop: ALL` - Suppression de toutes les capabilities Linux
+> - `seccompProfile: RuntimeDefault` - Profil Seccomp par défaut
+
+Les autres templates générés par `helm create` sont déjà fonctionnels (`service.yaml`, `ingress.yaml`, `hpa.yaml`, `_helpers.tpl`). Vous pouvez les consulter avec :
+
+```bash
+cat my-app/templates/service.yaml
+cat my-app/templates/ingress.yaml
+cat my-app/templates/hpa.yaml
+cat my-app/templates/_helpers.tpl
+```
+
+Le fichier `_helpers.tpl` contient les fonctions Helm réutilisables (comme `my-app.fullname`, `my-app.labels`, `my-app.selectorLabels`) utilisées dans les templates.
 
 **Exercice 4 : Déployer votre Chart**
 
