@@ -41,6 +41,9 @@ spec:
         volumeMounts:
         - name: html
           mountPath: /usr/share/nginx/html
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
         - name: cache
           mountPath: /var/cache/nginx
         - name: run
@@ -59,6 +62,9 @@ spec:
       - name: html
         configMap:
           name: frontend-html
+      - name: nginx-config
+        configMap:
+          name: frontend-nginx-config
       - name: cache
         emptyDir: {}
       - name: run

@@ -70,6 +70,7 @@ echo ""
 
 # Déployer Frontend
 echo -e "${YELLOW}[5/8] Déploiement du Frontend${NC}"
+kubectl apply -f 12-frontend-nginx-config.yaml
 kubectl apply -f 12-frontend-config.yaml
 kubectl apply -f 13-frontend-deployment.yaml
 kubectl apply -f 14-frontend-service.yaml

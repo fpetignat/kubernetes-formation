@@ -791,7 +791,116 @@ kubectl get hpa backend-api-hpa -w
 
 ## 🌐 Partie 5 : Frontend et Exposition
 
-### 5.1 ConfigMap pour le Frontend
+**📌 Note importante sur l'architecture Frontend/Backend** :
+
+Le frontend est une application HTML/JavaScript statique servie par Nginx. Lorsqu'un utilisateur accède au frontend depuis son navigateur, le JavaScript s'exécute **côté client** (dans le navigateur).
+
+**Problème** : Les URLs internes Kubernetes (comme `http://backend-api.taskflow.svc.cluster.local:5000`) ne sont pas accessibles depuis le navigateur du client car :
+- Le navigateur ne peut pas résoudre les DNS `.svc.cluster.local` (internes à Kubernetes)
+- Le navigateur ne peut pas atteindre les IPs internes du cluster
+
+**Solution** : Nous configurons **Nginx comme reverse proxy**. Le frontend utilise une URL relative (`/api`) et Nginx redirige les requêtes vers le service backend interne.
+
+```
+Navigateur → /api → Nginx (reverse proxy) → http://backend-api:5000
+```
+
+### 5.1 Configuration Nginx avec Reverse Proxy
+
+Créer `12-frontend-nginx-config.yaml` :
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-nginx-config
+  namespace: taskflow
+  labels:
+    app: frontend
+data:
+  nginx.conf: |
+    user nginx;
+    worker_processes auto;
+    pid /var/run/nginx.pid;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+
+        access_log /dev/stdout;
+        error_log /dev/stderr warn;
+
+        sendfile on;
+        tcp_nopush on;
+        keepalive_timeout 65;
+
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 1000;
+        gzip_types text/plain text/css application/json application/javascript text/xml;
+
+        server {
+            listen 80;
+            server_name _;
+
+            root /usr/share/nginx/html;
+            index index.html;
+
+            # Frontend - Servir l'application HTML/JS
+            location / {
+                try_files $uri $uri/ /index.html;
+                add_header X-Content-Type-Options "nosniff" always;
+                add_header X-Frame-Options "SAMEORIGIN" always;
+                add_header X-XSS-Protection "1; mode=block" always;
+            }
+
+            # API Backend - Reverse proxy vers le service backend-api
+            location /api/ {
+                # Supprimer le préfixe /api avant de transférer
+                rewrite ^/api/(.*) /$1 break;
+
+                # Proxy vers le service Kubernetes backend-api
+                proxy_pass http://backend-api:5000;
+
+                # Headers de proxy standards
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+
+                # Timeouts
+                proxy_connect_timeout 30s;
+                proxy_send_timeout 30s;
+                proxy_read_timeout 30s;
+            }
+
+            # Health check endpoint
+            location /health {
+                access_log off;
+                return 200 "healthy\n";
+                add_header Content-Type text/plain;
+            }
+        }
+    }
+```
+
+**Explication de la configuration** :
+- `location /` : Sert les fichiers statiques du frontend (HTML/CSS/JS)
+- `location /api/` : Reverse proxy vers le backend
+  - `rewrite ^/api/(.*) /$1 break` : Supprime le préfixe `/api` (ex: `/api/tasks` → `/tasks`)
+  - `proxy_pass http://backend-api:5000` : Redirige vers le service backend interne
+  - Headers de proxy pour préserver l'information du client
+
+Appliquer :
+```bash
+kubectl apply -f 12-frontend-nginx-config.yaml
+```
+
+### 5.2 ConfigMap pour le Frontend HTML
 
 Créer `12-frontend-config.yaml` :
 
@@ -965,7 +1074,8 @@ data:
         </div>
 
         <script>
-            const API_URL = 'http://backend-api.taskflow.svc.cluster.local:5000';
+            // Utiliser une URL relative car Nginx proxie /api vers le backend
+            const API_URL = '/api';
 
             async function loadTasks(priority = null) {
                 const tasksList = document.getElementById('tasksList');
@@ -1043,7 +1153,7 @@ Appliquer :
 kubectl apply -f 12-frontend-config.yaml
 ```
 
-### 5.2 Deployment Frontend
+### 5.3 Deployment Frontend
 
 Créer `13-frontend-deployment.yaml` :
 
@@ -1067,15 +1177,39 @@ spec:
         app: frontend
         tier: presentation
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
       - name: nginx
         image: nginx:1.25-alpine
         ports:
         - containerPort: 80
           name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 101
+          capabilities:
+            drop:
+            - ALL
         volumeMounts:
         - name: html
           mountPath: /usr/share/nginx/html
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "32Mi"
@@ -1083,18 +1217,33 @@ spec:
           limits:
             memory: "64Mi"
             cpu: "100m"
+
       volumes:
       - name: html
         configMap:
           name: frontend-html
+      - name: nginx-config
+        configMap:
+          name: frontend-nginx-config
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
 ```
+
+**Points importants** :
+- Le volume `nginx-config` monte la configuration Nginx personnalisée avec le reverse proxy
+- Les volumes `emptyDir` sont nécessaires car `readOnlyRootFilesystem: true` est activé pour la sécurité
+- Le securityContext suit les meilleures pratiques Kubernetes (voir `.claude/SECURITY.md`)
 
 Appliquer :
 ```bash
 kubectl apply -f 13-frontend-deployment.yaml
 ```
 
-### 5.3 Service Frontend (LoadBalancer)
+### 5.4 Service Frontend (LoadBalancer)
 
 Créer `14-frontend-service.yaml` :
 
