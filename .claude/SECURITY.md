@@ -376,6 +376,69 @@ securityContext:
   fsGroup: 70
 ```
 
+### Bases de données (PostgreSQL, MySQL, MongoDB, etc.)
+
+**Important** : Les bases de données sont un cas spécial où `readOnlyRootFilesystem: true` n'est **pas approprié**.
+
+**Raisons** :
+- Les bases de données doivent initialiser leur répertoire de données (`initdb` pour PostgreSQL)
+- Elles doivent créer des fichiers de configuration et modifier les permissions
+- Le processus de démarrage nécessite un accès en écriture légitime
+
+**Configuration sécurisée pour PostgreSQL** :
+```yaml
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 70       # UID postgres
+    fsGroup: 70
+    seccompProfile:
+      type: RuntimeDefault
+
+  containers:
+  - name: postgres
+    image: postgres:16-alpine
+    securityContext:
+      allowPrivilegeEscalation: false
+      # Note: readOnlyRootFilesystem is NOT set
+      # PostgreSQL needs write access to manage its data directory
+      runAsNonRoot: true
+      runAsUser: 70
+      capabilities:
+        drop:
+        - ALL
+
+    volumeMounts:
+    - name: postgres-data
+      mountPath: /var/lib/postgresql/data
+    - name: run
+      mountPath: /var/run/postgresql
+    - name: tmp
+      mountPath: /tmp
+
+  volumes:
+  - name: postgres-data
+    persistentVolumeClaim:
+      claimName: postgres-pvc
+  - name: run
+    emptyDir: {}
+  - name: tmp
+    emptyDir: {}
+```
+
+**Sécurité maintenue par** :
+- ✅ Exécution en tant qu'utilisateur non-root (UID 70)
+- ✅ Aucune escalade de privilèges
+- ✅ Toutes les capabilities supprimées
+- ✅ Profil seccomp actif
+- ✅ Isolation via volumes dédiés (PVC + emptyDir)
+- ✅ Resources limits définis
+
+**Autres bases de données** :
+- **MySQL** : Même approche, utiliser UID 999
+- **MongoDB** : Même approche, utiliser UID 999
+- **Redis** : Peut fonctionner avec `readOnlyRootFilesystem: true` si données en emptyDir
+
 ### Applications Python avec pip
 
 ```yaml
