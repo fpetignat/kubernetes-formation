@@ -18,6 +18,22 @@ echo ""
 
 NAMESPACE="taskflow"
 
+# Vérifier que l'image backend est construite
+echo -e "${YELLOW}[0/8] Vérification de l'image Docker backend${NC}"
+eval $(minikube docker-env)
+if ! docker images | grep -q "taskflow-backend"; then
+    echo -e "${YELLOW}⚠️  L'image taskflow-backend n'est pas trouvée${NC}"
+    echo -e "${YELLOW}   Construction de l'image en cours...${NC}"
+    ./build-images.sh
+    if [ $? -ne 0 ]; then
+        echo "❌ Erreur lors de la construction de l'image backend"
+        exit 1
+    fi
+else
+    echo -e "${GREEN}✅ Image taskflow-backend:latest trouvée${NC}"
+fi
+echo ""
+
 # Créer le namespace
 echo -e "${YELLOW}[1/8] Création du namespace $NAMESPACE${NC}"
 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -

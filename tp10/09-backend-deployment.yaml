@@ -26,20 +26,9 @@ spec:
 
       containers:
       - name: api
-        image: python:3.11-slim
+        image: taskflow-backend:latest
+        imagePullPolicy: Never
         workingDir: /app
-        command:
-        - /bin/bash
-        - -c
-        - |
-          # Installer les dépendances en mode utilisateur
-          pip install --user --no-cache-dir flask psycopg2-binary redis gunicorn
-
-          # Ajouter .local/bin au PATH pour accéder à gunicorn
-          export PATH=/home/nonroot/.local/bin:$PATH
-
-          # Lancer l'application
-          exec gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 60 app:app
         ports:
         - containerPort: 5000
           name: http
@@ -62,8 +51,6 @@ spec:
             secretKeyRef:
               name: postgres-secret
               key: POSTGRES_PASSWORD
-        - name: HOME
-          value: /home/nonroot
         envFrom:
         - configMapRef:
             name: backend-config
@@ -71,7 +58,7 @@ spec:
         - name: app-code
           mountPath: /app
         - name: home
-          mountPath: /home/nonroot
+          mountPath: /home/appuser
         - name: tmp
           mountPath: /tmp
         resources:
