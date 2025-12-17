@@ -6,6 +6,8 @@ Cette alternative vous permet de mettre en place un pipeline CI/CD complet direc
 
 Nous utiliserons **Tekton**, un framework CI/CD Kubernetes-native, open source et gratuit.
 
+> **📌 Note sur les versions** : Ce guide utilise les liens pérennes pointant vers les **dernières versions stables** de Tekton (`latest`). Si vous avez besoin d'une version spécifique, remplacez `latest` par le numéro de version désiré (ex: `v0.50.0`). Pour connaître les versions disponibles, consultez les [releases officielles de Tekton](https://github.com/tektoncd/pipeline/releases).
+
 ## Pourquoi Tekton ?
 
 - **Kubernetes-native** : S'exécute directement dans votre cluster
@@ -32,8 +34,8 @@ Nous utiliserons **Tekton**, un framework CI/CD Kubernetes-native, open source e
 ### 1. Installer Tekton Pipelines
 
 ```bash
-# Installer Tekton Pipelines (core) v0.37.0
-kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/previous/v0.37.0/release.yaml
+# Installer Tekton Pipelines (dernière version stable)
+kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/latest/release.yaml
 
 # Vérifier l'installation
 kubectl get pods -n tekton-pipelines
@@ -45,9 +47,9 @@ kubectl wait --for=condition=ready pod --all -n tekton-pipelines --timeout=300s
 ### 2. Installer Tekton Triggers (optionnel, pour automation)
 
 ```bash
-# Installer Tekton Triggers v0.20.0
-kubectl apply -f https://storage.googleapis.com/tekton-releases/triggers/previous/v0.20.0/release.yaml
-kubectl apply -f https://storage.googleapis.com/tekton-releases/triggers/previous/v0.20.0/interceptors.yaml
+# Installer Tekton Triggers (dernière version stable)
+kubectl apply -f https://storage.googleapis.com/tekton-releases/triggers/latest/release.yaml
+kubectl apply -f https://storage.googleapis.com/tekton-releases/triggers/latest/interceptors.yaml
 
 # Vérifier
 kubectl get pods -n tekton-pipelines
@@ -56,8 +58,8 @@ kubectl get pods -n tekton-pipelines
 ### 3. Installer Tekton Dashboard (interface graphique)
 
 ```bash
-# Installer le Dashboard v0.28.0
-kubectl apply -f https://storage.googleapis.com/tekton-releases/dashboard/previous/v0.28.0/tekton-dashboard-release.yaml
+# Installer le Dashboard (dernière version stable)
+kubectl apply -f https://storage.googleapis.com/tekton-releases/dashboard/latest/release.yaml
 
 # Exposer le Dashboard
 kubectl port-forward -n tekton-pipelines service/tekton-dashboard 9097:9097 &
@@ -69,9 +71,13 @@ echo "Dashboard disponible sur : http://localhost:9097"
 ### 4. Installer Tekton CLI (optionnel mais recommandé)
 
 ```bash
-# Linux
-curl -LO https://github.com/tektoncd/cli/releases/download/v0.33.0/tkn_0.33.0_Linux_x86_64.tar.gz
-sudo tar xvzf tkn_0.33.0_Linux_x86_64.tar.gz -C /usr/local/bin/ tkn
+# Vérifier la dernière version sur https://github.com/tektoncd/cli/releases
+
+# Linux (remplacer VERSION par la dernière version, ex: v0.35.0)
+VERSION=$(curl -s https://api.github.com/repos/tektoncd/cli/releases/latest | grep tag_name | cut -d '"' -f 4)
+curl -LO "https://github.com/tektoncd/cli/releases/download/${VERSION}/tkn_${VERSION#v}_Linux_x86_64.tar.gz"
+sudo tar xvzf "tkn_${VERSION#v}_Linux_x86_64.tar.gz" -C /usr/local/bin/ tkn
+rm "tkn_${VERSION#v}_Linux_x86_64.tar.gz"
 
 # Vérifier
 tkn version
@@ -751,20 +757,20 @@ set -e
 echo "=== Installation de Tekton ===="
 
 # 1. Installer Tekton Pipelines
-echo "Installation de Tekton Pipelines v0.37.0..."
-kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/previous/v0.37.0/release.yaml
+echo "Installation de Tekton Pipelines (dernière version stable)..."
+kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/latest/release.yaml
 
 echo "Attente que Tekton soit prêt..."
 kubectl wait --for=condition=ready pod --all -n tekton-pipelines --timeout=300s
 
 # 2. Installer Tekton Triggers
-echo "Installation de Tekton Triggers v0.20.0..."
-kubectl apply -f https://storage.googleapis.com/tekton-releases/triggers/previous/v0.20.0/release.yaml
-kubectl apply -f https://storage.googleapis.com/tekton-releases/triggers/previous/v0.20.0/interceptors.yaml
+echo "Installation de Tekton Triggers (dernière version stable)..."
+kubectl apply -f https://storage.googleapis.com/tekton-releases/triggers/latest/release.yaml
+kubectl apply -f https://storage.googleapis.com/tekton-releases/triggers/latest/interceptors.yaml
 
 # 3. Installer Tekton Dashboard
-echo "Installation du Tekton Dashboard v0.28.0..."
-kubectl apply -f https://storage.googleapis.com/tekton-releases/dashboard/previous/v0.28.0/tekton-dashboard-release.yaml
+echo "Installation du Tekton Dashboard (dernière version stable)..."
+kubectl apply -f https://storage.googleapis.com/tekton-releases/dashboard/latest/release.yaml
 
 echo "Attente que le Dashboard soit prêt..."
 kubectl wait --for=condition=ready pod -l app=tekton-dashboard -n tekton-pipelines --timeout=300s
