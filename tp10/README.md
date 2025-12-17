@@ -1730,15 +1730,22 @@ minikube service grafana -n taskflow
      - Status: ✅ **"Data source is working"**
    - ℹ️ La datasource est provisionée automatiquement au démarrage de Grafana
 
-4. Créer un dashboard :
-   - Aller dans **Dashboards** → **New** → **New Dashboard**
-   - Ajouter des panels pour :
-     - CPU usage des pods backend
-     - Memory usage des pods backend
-     - Nombre de replicas du deployment backend-api
-     - Requêtes par seconde
+4. **Accéder au dashboard pré-configuré (déjà disponible)** :
+   - Aller dans **Dashboards** → **Browse**
+   - Cliquer sur **"TaskFlow - Overview & Auto-scaling"**
+   - 🎉 **Le dashboard est déjà configuré avec toutes les métriques importantes !**
 
-**Requêtes PromQL utiles** :
+**Contenu du dashboard pré-configuré** :
+- 📊 **Vue d'ensemble** : État des pods (Running, Backend Pods HPA, PostgreSQL, Redis)
+- 🚀 **Auto-scaling Backend API** : Évolution du nombre de pods, CPU, mémoire
+- 💻 **Métriques CPU** : Usage CPU détaillé par pod (backend, postgres, redis)
+- 🧠 **Métriques Mémoire** : Usage mémoire détaillé par pod
+- 🗄️ **Base de données PostgreSQL** : État et ressources
+- ⚡ **Cache Redis** : État et ressources
+- 📡 **Métriques Réseau** : Trafic entrant/sortant
+
+**Personnalisation (optionnel)** :
+Si vous souhaitez créer vos propres dashboards ou panels :
 ```promql
 # Pods actifs
 up{job="kubernetes-pods"}
@@ -1749,8 +1756,8 @@ rate(container_cpu_usage_seconds_total[5m])
 # Utilisation mémoire
 container_memory_usage_bytes
 
-# Nombre de replicas
-kube_deployment_status_replicas{deployment="backend-api"}
+# Nombre de replicas backend
+count(up{job="kubernetes-pods", app="backend-api"} == 1)
 ```
 
 ### 8.5 Observer le HPA (avant charge)
@@ -1830,11 +1837,27 @@ kubectl delete job load-generator -n taskflow
 
 ### 9.4 Observer dans Grafana
 
-Pendant le test, observer dans Grafana :
-1. Le **CPU usage** monter puis se stabiliser
-2. Le **nombre de pods** augmenter de 2 à 8-10
-3. Les **requêtes par seconde** augmenter
-4. La **latence** rester stable grâce à l'autoscaling
+Ouvrir le **dashboard pré-configuré "TaskFlow - Overview & Auto-scaling"** dans Grafana.
+
+Pendant le test, observer en temps réel :
+
+**Section "Auto-scaling Backend API"** :
+1. 📈 **Nombre de Pods Backend (évolution)** : Passe de 2 à 8-10 pods
+2. 🔥 **CPU Usage - Backend Pods** : Monte rapidement vers 50% (seuil HPA)
+3. 🧠 **Memory Usage - Backend Pods** : Augmente progressivement
+
+**Section "Vue d'ensemble"** :
+- Le **Backend Pods (HPA)** panel change de couleur (vert → jaune → rouge selon le nombre)
+- Les métriques sont rafraîchies toutes les 10 secondes
+
+**Section "Métriques CPU/Mémoire"** :
+- Voir tous les pods individuellement avec leur consommation
+- Observer l'ajout de nouveaux pods en temps réel
+
+**Timeline attendue** :
+- **0-2 min** : CPU monte rapidement, premiers pods créés
+- **2-5 min** : Stabilisation autour de 8-10 pods
+- **Après arrêt du load generator** : Scale-down progressif vers 2 pods (5-10 min)
 
 ## 📊 Partie 10 : Analyse et Nettoyage
 
