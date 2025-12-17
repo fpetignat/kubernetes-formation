@@ -166,12 +166,12 @@ kubectl top nodes
 cd tp10
 
 # Construire l'image backend avec le script automatisé
-./build-images.sh
+./build-image.sh
 ```
 
-Le script `build-images.sh` effectue les opérations suivantes :
-1. ✅ Vérifie que Minikube est démarré
-2. ✅ Configure l'environnement Docker de Minikube (`eval $(minikube docker-env)`)
+Le script `build-image.sh` effectue les opérations suivantes :
+1. ✅ Détecte automatiquement si Minikube est disponible et démarré
+2. ✅ Configure l'environnement Docker approprié (Minikube ou Docker local)
 3. ✅ Construit l'image `taskflow-backend:latest` avec le Dockerfile
 4. ✅ Rend l'image disponible directement dans Minikube
 
@@ -194,11 +194,10 @@ docker images | grep taskflow-backend
 **Structure des fichiers** :
 ```
 tp10/
-├── docker/
-│   └── backend/
-│       ├── Dockerfile           # Définition de l'image
-│       └── requirements.txt     # Dépendances Python
-├── build-images.sh              # Script de build automatisé
+├── Dockerfile                   # Définition de l'image backend
+├── app.py                       # Code Python de l'API backend
+├── requirements.txt             # Dépendances Python
+├── build-image.sh               # Script de build automatisé
 └── 09-backend-deployment.yaml   # Utilise taskflow-backend:latest
 ```
 

@@ -24,7 +24,7 @@ eval $(minikube docker-env)
 if ! docker images | grep -q "taskflow-backend"; then
     echo -e "${YELLOW}⚠️  L'image taskflow-backend n'est pas trouvée${NC}"
     echo -e "${YELLOW}   Construction de l'image en cours...${NC}"
-    ./build-images.sh
+    ./build-image.sh
     if [ $? -ne 0 ]; then
         echo "❌ Erreur lors de la construction de l'image backend"
         exit 1
