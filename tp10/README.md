@@ -1704,6 +1704,15 @@ Vous devriez voir l'interface web avec les 1000 tâches.
 
 ### 8.4 Configurer Grafana
 
+> **✨ NOUVEAU** : La datasource Prometheus est maintenant **configurée automatiquement** grâce au provisioning Kubernetes !
+>
+> Un script de test est disponible pour vérifier la circulation des métriques :
+> ```bash
+> ./test-metrics-flow.sh
+> ```
+>
+> **Documentation complète** : Voir [METRICS.md](METRICS.md) pour plus de détails.
+
 1. Accéder à Grafana :
 ```bash
 minikube service grafana -n taskflow
@@ -1714,12 +1723,12 @@ minikube service grafana -n taskflow
    - Username: `admin`
    - Password: `admin2024`
 
-3. Ajouter Prometheus comme Data Source :
-   - Aller dans **Configuration** → **Data Sources**
-   - Cliquer **Add data source**
-   - Sélectionner **Prometheus**
-   - URL: `http://prometheus.taskflow.svc.cluster.local:9090`
-   - Cliquer **Save & Test**
+3. **Vérifier la datasource Prometheus (déjà configurée)** :
+   - Aller dans **Configuration** → **Data Sources** (⚙️)
+   - Vous devriez voir **Prometheus** déjà configuré avec :
+     - URL: `http://prometheus.taskflow.svc.cluster.local:9090`
+     - Status: ✅ **"Data source is working"**
+   - ℹ️ La datasource est provisionée automatiquement au démarrage de Grafana
 
 4. Créer un dashboard :
    - Aller dans **Dashboards** → **New** → **New Dashboard**
@@ -1728,6 +1737,21 @@ minikube service grafana -n taskflow
      - Memory usage des pods backend
      - Nombre de replicas du deployment backend-api
      - Requêtes par seconde
+
+**Requêtes PromQL utiles** :
+```promql
+# Pods actifs
+up{job="kubernetes-pods"}
+
+# Utilisation CPU
+rate(container_cpu_usage_seconds_total[5m])
+
+# Utilisation mémoire
+container_memory_usage_bytes
+
+# Nombre de replicas
+kube_deployment_status_replicas{deployment="backend-api"}
+```
 
 ### 8.5 Observer le HPA (avant charge)
 
@@ -1844,6 +1868,7 @@ kubectl delete namespace taskflow
 kubectl delete -f 22-load-generator.yaml
 kubectl delete -f 21-grafana-service.yaml
 kubectl delete -f 20-grafana-deployment.yaml
+kubectl delete -f 20-grafana-datasource.yaml
 kubectl delete -f 19-prometheus-service.yaml
 kubectl delete -f 18-prometheus-deployment.yaml
 kubectl delete -f 17-prometheus-pvc.yaml
