@@ -131,7 +131,7 @@ kubectl exec -n $NAMESPACE $GRAFANA_POD -- cat /etc/grafana/provisioning/datasou
 
 # Interroger l'API Grafana pour lister les datasources
 echo "   Vérification via l'API Grafana..."
-DATASOURCES=$(kubectl exec -n $NAMESPACE $GRAFANA_POD -- wget -q -O - --header="Content-Type: application/json" --user=admin --password=admin2024 http://localhost:3000/api/datasources 2>/dev/null || echo "")
+DATASOURCES=$(kubectl exec -n $NAMESPACE $GRAFANA_POD -- curl -s -u admin:admin2024 http://localhost:3000/api/datasources 2>/dev/null || echo "")
 if [ -z "$DATASOURCES" ]; then
     fail "Impossible d'interroger l'API Grafana pour lister les datasources"
 fi
@@ -162,7 +162,7 @@ fi
 pass "Datasource ID: $DATASOURCE_ID"
 
 # Tester la datasource
-TEST_RESULT=$(kubectl exec -n $NAMESPACE $GRAFANA_POD -- wget -q -O - --header="Content-Type: application/json" --user=admin --password=admin2024 http://localhost:3000/api/datasources/$DATASOURCE_ID 2>/dev/null || echo "")
+TEST_RESULT=$(kubectl exec -n $NAMESPACE $GRAFANA_POD -- curl -s -u admin:admin2024 http://localhost:3000/api/datasources/$DATASOURCE_ID 2>/dev/null || echo "")
 
 if echo "$TEST_RESULT" | grep -q '"type":"prometheus"'; then
     pass "La datasource Prometheus est bien configurée"
@@ -176,7 +176,7 @@ echo "--------------------------------------------"
 
 # Effectuer une requête Prometheus via l'API Grafana
 echo "   Exécution d'une requête test: up{job=\"kubernetes-pods\"}..."
-QUERY_RESULT=$(kubectl exec -n $NAMESPACE $GRAFANA_POD -- wget -q -O - --header="Content-Type: application/json" --user=admin --password=admin2024 "http://localhost:3000/api/datasources/proxy/$DATASOURCE_ID/api/v1/query?query=up" 2>/dev/null || echo "")
+QUERY_RESULT=$(kubectl exec -n $NAMESPACE $GRAFANA_POD -- curl -s -u admin:admin2024 "http://localhost:3000/api/datasources/proxy/$DATASOURCE_ID/api/v1/query?query=up" 2>/dev/null || echo "")
 
 if [ -z "$QUERY_RESULT" ]; then
     fail "Impossible d'exécuter une requête via Grafana"
