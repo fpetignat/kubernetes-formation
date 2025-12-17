@@ -353,6 +353,816 @@ imagePullSecrets:
 - name: harbor-registry-secret
 ```
 
+## 🪞 Configuration du Proxy Cache et Miroir de Registries
+
+### Concept : Pull-Through Cache
+
+Harbor peut agir comme **proxy cache** (miroir) pour des registries externes. Quand un nœud Kubernetes demande une image, Harbor :
+
+1. ✅ Vérifie si l'image existe dans son cache local
+2. ✅ Si oui, retourne l'image immédiatement (rapide)
+3. ✅ Si non, télécharge l'image depuis le registre externe
+4. ✅ Stocke l'image en cache pour les prochaines demandes
+5. ✅ Retourne l'image au client
+
+**Avantages en DMZ** :
+- Un seul point de sortie vers Internet (contrôle strict du firewall)
+- Cache local des images fréquemment utilisées
+- Économie de bande passante
+- Continuité de service même si le registre externe est indisponible
+- Scan de sécurité centralisé
+
+### Architecture Détaillée Proxy Cache DMZ
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      INTERNET (Zone Publique)                    │
+│                                                                  │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│  │ Docker Hub  │  │     GCR     │  │    Quay     │             │
+│  │ docker.io   │  │  gcr.io     │  │  quay.io    │             │
+│  └─────────────┘  └─────────────┘  └─────────────┘             │
+│                                                                  │
+│  ┌───────────────────────────────────────────────┐              │
+│  │  Registries Privés Clients                    │              │
+│  │  - registry.customer-a.com                    │              │
+│  │  - registry.customer-b.com                    │              │
+│  └───────────────────────────────────────────────┘              │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                    [Firewall/Proxy]
+                     Règles strictes
+                    (HTTPS seulement)
+                           │
+┌──────────────────────────┼──────────────────────────────────────┐
+│                 ZONE DMZ (Registre Proxy)                        │
+│                          │                                       │
+│              ┌───────────▼──────────────┐                        │
+│              │   Harbor (Proxy Cache)   │                        │
+│              │  harbor.dmz.internal     │                        │
+│              │                          │                        │
+│              │  ┌──────────────────┐    │                        │
+│              │  │  Proxy Projects   │    │                        │
+│              │  │  - dockerhub-proxy│    │                        │
+│              │  │  - gcr-proxy      │    │                        │
+│              │  │  - quay-proxy     │    │                        │
+│              │  │  - customer-a     │    │                        │
+│              │  └──────────────────┘    │                        │
+│              │                          │                        │
+│              │  ┌──────────────────┐    │                        │
+│              │  │  Cache Storage   │    │                        │
+│              │  │  (500 GB - 5 TB) │    │                        │
+│              │  └──────────────────┘    │                        │
+│              └───────────┬──────────────┘                        │
+│                          │                                       │
+└──────────────────────────┼───────────────────────────────────────┘
+                           │
+                    [Firewall Interne]
+                  (Unidirectionnel: ← Pull)
+                           │
+┌──────────────────────────┼───────────────────────────────────────┐
+│         ZONE INTERNE (Clusters Kubernetes)                       │
+│                          │                                       │
+│  ┌───────────────────────┼──────────────────────────────────┐   │
+│  │    Cluster 1 (Production)                                │   │
+│  │                       │                                   │   │
+│  │  ┌─────┐  ┌─────┐   ┌─────┐   ┌─────┐                   │   │
+│  │  │Node1│  │Node2│   │Node3│   │Node4│                   │   │
+│  │  │     │◄─┤     │◄──┤     │◄──┤     │                   │   │
+│  │  └─────┘  └─────┘   └─────┘   └─────┘                   │   │
+│  │             Pull depuis:                                 │   │
+│  │             harbor.dmz.internal/dockerhub-proxy/nginx    │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │    Cluster 2 (Développement)                             │   │
+│  │  ┌─────┐  ┌─────┐                                        │   │
+│  │  │Node1│  │Node2│                                        │   │
+│  │  │     │◄─┤     │                                        │   │
+│  │  └─────┘  └─────┘                                        │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Configuration des Endpoints de Registries Externes
+
+#### 1. Créer les Registry Endpoints dans Harbor
+
+##### A. Docker Hub (Registre Public)
+
+Via l'interface Harbor :
+1. **Registrations** > **New Endpoint**
+2. Paramètres :
+   - **Provider** : Docker Hub
+   - **Name** : dockerhub
+   - **Endpoint URL** : https://hub.docker.com
+   - **Access ID** : (optionnel, pour augmenter le rate limit)
+   - **Access Secret** : (optionnel)
+   - **Verify Remote Cert** : ✅ Oui
+
+Via API :
+```bash
+curl -X POST "https://harbor.dmz.internal/api/v2.0/registries" \
+  -H "Content-Type: application/json" \
+  -u "admin:Harbor12345" \
+  -d '{
+    "name": "dockerhub",
+    "type": "docker-hub",
+    "url": "https://hub.docker.com",
+    "credential": {
+      "access_key": "your-dockerhub-username",
+      "access_secret": "your-dockerhub-token"
+    },
+    "insecure": false
+  }'
+```
+
+##### B. Google Container Registry (GCR)
+
+```bash
+curl -X POST "https://harbor.dmz.internal/api/v2.0/registries" \
+  -H "Content-Type: application/json" \
+  -u "admin:Harbor12345" \
+  -d '{
+    "name": "gcr",
+    "type": "google-gcr",
+    "url": "https://gcr.io",
+    "credential": {
+      "access_key": "_json_key",
+      "access_secret": "{\"type\":\"service_account\",\"project_id\":\"...\",\"private_key_id\":\"...\",\"private_key\":\"...\"}"
+    },
+    "insecure": false
+  }'
+```
+
+##### C. Quay.io
+
+```bash
+curl -X POST "https://harbor.dmz.internal/api/v2.0/registries" \
+  -H "Content-Type: application/json" \
+  -u "admin:Harbor12345" \
+  -d '{
+    "name": "quay",
+    "type": "quay",
+    "url": "https://quay.io",
+    "credential": {
+      "access_key": "your-quay-username",
+      "access_secret": "your-quay-token"
+    },
+    "insecure": false
+  }'
+```
+
+##### D. Registre Privé Client (avec authentification)
+
+```bash
+curl -X POST "https://harbor.dmz.internal/api/v2.0/registries" \
+  -H "Content-Type: application/json" \
+  -u "admin:Harbor12345" \
+  -d '{
+    "name": "customer-a-registry",
+    "type": "docker-registry",
+    "url": "https://registry.customer-a.com",
+    "credential": {
+      "access_key": "robot-account-user",
+      "access_secret": "robot-account-token"
+    },
+    "insecure": false
+  }'
+```
+
+##### E. Amazon ECR
+
+```bash
+curl -X POST "https://harbor.dmz.internal/api/v2.0/registries" \
+  -H "Content-Type: application/json" \
+  -u "admin:Harbor12345" \
+  -d '{
+    "name": "aws-ecr",
+    "type": "aws-ecr",
+    "url": "https://123456789012.dkr.ecr.eu-west-1.amazonaws.com",
+    "credential": {
+      "access_key": "AKIA...",
+      "access_secret": "wJalrXUtn..."
+    },
+    "insecure": false
+  }'
+```
+
+##### F. Azure Container Registry (ACR)
+
+```bash
+curl -X POST "https://harbor.dmz.internal/api/v2.0/registries" \
+  -H "Content-Type: application/json" \
+  -u "admin:Harbor12345" \
+  -d '{
+    "name": "azure-acr",
+    "type": "azure-acr",
+    "url": "https://myregistry.azurecr.io",
+    "credential": {
+      "access_key": "service-principal-id",
+      "access_secret": "service-principal-password"
+    },
+    "insecure": false
+  }'
+```
+
+#### 2. Créer des Proxy Projects
+
+Un **Proxy Project** dans Harbor est un projet spécial qui cache automatiquement les images d'un registre externe.
+
+##### A. Créer un Proxy Project pour Docker Hub
+
+Via l'interface Harbor :
+1. **Projects** > **New Project**
+2. Paramètres :
+   - **Project Name** : dockerhub-proxy
+   - **Access Level** : Private
+   - **Proxy Cache** : ✅ Activé
+   - **Registry** : dockerhub (endpoint créé précédemment)
+
+Via API :
+```bash
+curl -X POST "https://harbor.dmz.internal/api/v2.0/projects" \
+  -H "Content-Type: application/json" \
+  -u "admin:Harbor12345" \
+  -d '{
+    "project_name": "dockerhub-proxy",
+    "public": false,
+    "registry_id": 1
+  }'
+```
+
+##### B. Créer plusieurs Proxy Projects
+
+```bash
+# GCR Proxy
+curl -X POST "https://harbor.dmz.internal/api/v2.0/projects" \
+  -H "Content-Type: application/json" \
+  -u "admin:Harbor12345" \
+  -d '{
+    "project_name": "gcr-proxy",
+    "public": false,
+    "registry_id": 2
+  }'
+
+# Quay Proxy
+curl -X POST "https://harbor.dmz.internal/api/v2.0/projects" \
+  -H "Content-Type: application/json" \
+  -u "admin:Harbor12345" \
+  -d '{
+    "project_name": "quay-proxy",
+    "public": false,
+    "registry_id": 3
+  }'
+
+# Customer A Proxy
+curl -X POST "https://harbor.dmz.internal/api/v2.0/projects" \
+  -H "Content-Type: application/json" \
+  -u "admin:Harbor12345" \
+  -d '{
+    "project_name": "customer-a-proxy",
+    "public": false,
+    "registry_id": 4
+  }'
+```
+
+### Utilisation du Proxy Cache depuis Kubernetes
+
+#### 1. Adaptation des Image Names
+
+**Format original** → **Format avec proxy cache**
+
+| Registre Source | Image Originale | Image via Harbor Proxy |
+|-----------------|-----------------|------------------------|
+| **Docker Hub** | `nginx:latest` | `harbor.dmz.internal/dockerhub-proxy/library/nginx:latest` |
+| **Docker Hub** | `redis:7-alpine` | `harbor.dmz.internal/dockerhub-proxy/library/redis:7-alpine` |
+| **Docker Hub** | `grafana/grafana:latest` | `harbor.dmz.internal/dockerhub-proxy/grafana/grafana:latest` |
+| **GCR** | `gcr.io/google-containers/pause:3.9` | `harbor.dmz.internal/gcr-proxy/google-containers/pause:3.9` |
+| **Quay** | `quay.io/prometheus/prometheus:v2.45.0` | `harbor.dmz.internal/quay-proxy/prometheus/prometheus:v2.45.0` |
+| **Customer A** | `registry.customer-a.com/app/backend:v1.0` | `harbor.dmz.internal/customer-a-proxy/app/backend:v1.0` |
+
+**Règle de transformation** :
+```
+<original-registry>/<namespace>/<image>:<tag>
+                ↓
+harbor.dmz.internal/<proxy-project>/<namespace>/<image>:<tag>
+```
+
+**Note importante pour Docker Hub** :
+- Images officielles comme `nginx`, `redis`, `postgres` sont dans le namespace `library`
+- Donc `nginx:latest` devient `harbor.dmz.internal/dockerhub-proxy/library/nginx:latest`
+
+#### 2. Exemple de Deployment avec Proxy Cache
+
+##### Avant (accès direct à Internet)
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25-alpine
+      - name: redis
+        image: redis:7-alpine
+```
+
+##### Après (via Harbor Proxy Cache en DMZ)
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      # Secret pour s'authentifier au registre Harbor
+      imagePullSecrets:
+      - name: harbor-registry-secret
+
+      containers:
+      - name: nginx
+        # Image récupérée via proxy cache Harbor
+        image: harbor.dmz.internal/dockerhub-proxy/library/nginx:1.25-alpine
+
+      - name: redis
+        # Image récupérée via proxy cache Harbor
+        image: harbor.dmz.internal/dockerhub-proxy/library/redis:7-alpine
+```
+
+#### 3. Exemples Avancés
+
+##### A. Application Multi-Registres
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitoring-stack
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: monitoring
+  template:
+    metadata:
+      labels:
+        app: monitoring
+    spec:
+      imagePullSecrets:
+      - name: harbor-registry-secret
+
+      containers:
+      # Prometheus depuis Quay.io
+      - name: prometheus
+        image: harbor.dmz.internal/quay-proxy/prometheus/prometheus:v2.45.0
+        ports:
+        - containerPort: 9090
+
+      # Grafana depuis Docker Hub
+      - name: grafana
+        image: harbor.dmz.internal/dockerhub-proxy/grafana/grafana:10.0.0
+        ports:
+        - containerPort: 3000
+
+      # Application custom depuis registre client
+      - name: custom-exporter
+        image: harbor.dmz.internal/customer-a-proxy/monitoring/exporter:v1.2.0
+        ports:
+        - containerPort: 8080
+```
+
+##### B. Job avec Image GCR
+
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: data-migration
+  namespace: production
+spec:
+  template:
+    spec:
+      imagePullSecrets:
+      - name: harbor-registry-secret
+
+      restartPolicy: Never
+      containers:
+      - name: migrator
+        # Image Google Cloud depuis GCR via Harbor proxy
+        image: harbor.dmz.internal/gcr-proxy/google-samples/hello-app:1.0
+        command: ["./migrate"]
+```
+
+##### C. DaemonSet avec Image AWS ECR
+
+```yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: log-collector
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: log-collector
+  template:
+    metadata:
+      labels:
+        app: log-collector
+    spec:
+      imagePullSecrets:
+      - name: harbor-registry-secret
+
+      containers:
+      - name: fluentd
+        # Image depuis AWS ECR via Harbor proxy
+        image: harbor.dmz.internal/aws-ecr-proxy/logging/fluentd:v1.16
+        volumeMounts:
+        - name: varlog
+          mountPath: /var/log
+
+      volumes:
+      - name: varlog
+        hostPath:
+          path: /var/log
+```
+
+### Préchargement d'Images (Preheat)
+
+En DMZ stricte, il peut être nécessaire de **précharger les images** dans Harbor avant le déploiement.
+
+#### Méthode 1 : Pull Manuel via Script
+
+```bash
+#!/bin/bash
+# preheat-images.sh - Script pour précharger des images dans Harbor
+
+HARBOR_URL="harbor.dmz.internal"
+HARBOR_USER="admin"
+HARBOR_PASSWORD="Harbor12345"
+
+# Liste des images à précharger
+IMAGES=(
+  "dockerhub-proxy/library/nginx:1.25-alpine"
+  "dockerhub-proxy/library/redis:7-alpine"
+  "dockerhub-proxy/grafana/grafana:10.0.0"
+  "quay-proxy/prometheus/prometheus:v2.45.0"
+  "gcr-proxy/google-samples/hello-app:1.0"
+)
+
+# Login à Harbor
+echo "$HARBOR_PASSWORD" | docker login $HARBOR_URL -u $HARBOR_USER --password-stdin
+
+# Précharger chaque image
+for IMAGE in "${IMAGES[@]}"; do
+  echo "============================================"
+  echo "Pulling: ${HARBOR_URL}/${IMAGE}"
+  echo "============================================"
+
+  docker pull ${HARBOR_URL}/${IMAGE}
+
+  if [ $? -eq 0 ]; then
+    echo "✅ Successfully pulled: ${IMAGE}"
+  else
+    echo "❌ Failed to pull: ${IMAGE}"
+    exit 1
+  fi
+done
+
+echo ""
+echo "============================================"
+echo "✅ All images preheated successfully!"
+echo "============================================"
+
+# Nettoyer les images locales
+docker image prune -f
+```
+
+#### Méthode 2 : Preheat Policy (Harbor 2.6+)
+
+Harbor 2.6+ offre une fonctionnalité de **preheat policy** pour automatiser le préchargement.
+
+Via l'interface Harbor :
+1. **Projects** > Sélectionner le proxy project
+2. **P2P Preheat** > **New Policy**
+3. Configurer :
+   - **Name** : preheat-critical-images
+   - **Trigger Type** : Manual ou Scheduled
+   - **Filters** : Par tag ou nom d'image
+   - **Provider** : Dragonfly ou Kraken (P2P distribution)
+
+Via API :
+```bash
+curl -X POST "https://harbor.dmz.internal/api/v2.0/projects/dockerhub-proxy/preheat/policies" \
+  -H "Content-Type: application/json" \
+  -u "admin:Harbor12345" \
+  -d '{
+    "name": "preheat-critical-images",
+    "description": "Preheat critical images for production",
+    "filters": [
+      {
+        "type": "repository",
+        "value": "library/nginx"
+      },
+      {
+        "type": "tag",
+        "value": "1.**"
+      }
+    ],
+    "trigger": {
+      "type": "manual"
+    },
+    "enabled": true
+  }'
+```
+
+#### Méthode 3 : Import/Export d'Images (Air-Gapped)
+
+Pour environnements **complètement isolés** (air-gapped), utiliser l'export/import manuel.
+
+```bash
+# Sur une machine avec accès Internet
+# ===================================
+
+# 1. Télécharger les images
+docker pull nginx:1.25-alpine
+docker pull redis:7-alpine
+docker pull grafana/grafana:10.0.0
+
+# 2. Sauvegarder les images dans un tar
+docker save -o images-bundle.tar \
+  nginx:1.25-alpine \
+  redis:7-alpine \
+  grafana/grafana:10.0.0
+
+# 3. Transférer images-bundle.tar vers la DMZ (clé USB, transfert sécurisé, etc.)
+
+# Sur la machine Harbor en DMZ
+# ============================
+
+# 4. Charger les images
+docker load -i images-bundle.tar
+
+# 5. Re-tagger avec le namespace Harbor
+docker tag nginx:1.25-alpine harbor.dmz.internal/dockerhub-proxy/library/nginx:1.25-alpine
+docker tag redis:7-alpine harbor.dmz.internal/dockerhub-proxy/library/redis:7-alpine
+docker tag grafana/grafana:10.0.0 harbor.dmz.internal/dockerhub-proxy/grafana/grafana:10.0.0
+
+# 6. Login à Harbor
+docker login harbor.dmz.internal -u admin
+
+# 7. Push vers Harbor
+docker push harbor.dmz.internal/dockerhub-proxy/library/nginx:1.25-alpine
+docker push harbor.dmz.internal/dockerhub-proxy/library/redis:7-alpine
+docker push harbor.dmz.internal/dockerhub-proxy/grafana/grafana:10.0.0
+```
+
+### Automatisation avec Script Python
+
+```python
+#!/usr/bin/env python3
+"""
+Harbor Proxy Cache Manager
+Automatise le préchargement d'images via Harbor proxy cache
+"""
+
+import requests
+import json
+from typing import List, Dict
+
+class HarborProxyManager:
+    def __init__(self, harbor_url: str, username: str, password: str):
+        self.harbor_url = harbor_url.rstrip('/')
+        self.auth = (username, password)
+        self.session = requests.Session()
+        self.session.auth = self.auth
+
+    def create_registry_endpoint(self, name: str, registry_type: str,
+                                 url: str, access_key: str = None,
+                                 access_secret: str = None) -> Dict:
+        """Créer un endpoint de registre externe"""
+        endpoint = f"{self.harbor_url}/api/v2.0/registries"
+
+        data = {
+            "name": name,
+            "type": registry_type,
+            "url": url,
+            "insecure": False
+        }
+
+        if access_key and access_secret:
+            data["credential"] = {
+                "access_key": access_key,
+                "access_secret": access_secret
+            }
+
+        response = self.session.post(endpoint, json=data)
+        response.raise_for_status()
+        return response.json()
+
+    def create_proxy_project(self, project_name: str, registry_id: int) -> Dict:
+        """Créer un projet proxy cache"""
+        endpoint = f"{self.harbor_url}/api/v2.0/projects"
+
+        data = {
+            "project_name": project_name,
+            "public": False,
+            "registry_id": registry_id
+        }
+
+        response = self.session.post(endpoint, json=data)
+        response.raise_for_status()
+        return response.json()
+
+    def preheat_images(self, proxy_project: str, images: List[str]) -> None:
+        """Précharger une liste d'images via le proxy cache"""
+        import docker
+        client = docker.from_env()
+
+        # Login à Harbor
+        client.login(
+            username=self.auth[0],
+            password=self.auth[1],
+            registry=self.harbor_url.replace('https://', '')
+        )
+
+        for image in images:
+            full_image = f"{self.harbor_url.replace('https://', '')}/{proxy_project}/{image}"
+            print(f"Pulling {full_image}...")
+
+            try:
+                client.images.pull(full_image)
+                print(f"✅ {image} preheated successfully")
+            except Exception as e:
+                print(f"❌ Failed to preheat {image}: {e}")
+
+# Utilisation
+if __name__ == "__main__":
+    manager = HarborProxyManager(
+        harbor_url="https://harbor.dmz.internal",
+        username="admin",
+        password="Harbor12345"
+    )
+
+    # Créer un endpoint Docker Hub
+    registry_id = manager.create_registry_endpoint(
+        name="dockerhub",
+        registry_type="docker-hub",
+        url="https://hub.docker.com"
+    )
+
+    # Créer un projet proxy
+    manager.create_proxy_project(
+        project_name="dockerhub-proxy",
+        registry_id=registry_id
+    )
+
+    # Précharger des images critiques
+    images_to_preheat = [
+        "library/nginx:1.25-alpine",
+        "library/redis:7-alpine",
+        "grafana/grafana:10.0.0"
+    ]
+
+    manager.preheat_images("dockerhub-proxy", images_to_preheat)
+```
+
+### Monitoring du Proxy Cache
+
+#### Métriques Importantes
+
+```promql
+# Taux de cache hit (images servies depuis le cache)
+rate(harbor_proxy_cache_hit_total[5m])
+
+# Taux de cache miss (images téléchargées depuis l'externe)
+rate(harbor_proxy_cache_miss_total[5m])
+
+# Temps de réponse du proxy cache
+histogram_quantile(0.95, rate(harbor_proxy_request_duration_seconds_bucket[5m]))
+
+# Espace utilisé par projet proxy
+harbor_project_quota_usage_byte{project_name=~".*-proxy"}
+
+# Nombre d'images dans les projets proxy
+harbor_project_repo_count{project_name=~".*-proxy"}
+```
+
+#### Dashboard Grafana pour Proxy Cache
+
+```json
+{
+  "dashboard": {
+    "title": "Harbor Proxy Cache Monitoring",
+    "panels": [
+      {
+        "title": "Cache Hit Rate",
+        "targets": [
+          {
+            "expr": "rate(harbor_proxy_cache_hit_total[5m]) / (rate(harbor_proxy_cache_hit_total[5m]) + rate(harbor_proxy_cache_miss_total[5m])) * 100"
+          }
+        ],
+        "type": "graph"
+      },
+      {
+        "title": "Cache Storage Usage",
+        "targets": [
+          {
+            "expr": "harbor_project_quota_usage_byte{project_name=~\".*-proxy\"}"
+          }
+        ],
+        "type": "graph"
+      },
+      {
+        "title": "Top Pulled Images",
+        "targets": [
+          {
+            "expr": "topk(10, rate(harbor_proxy_pull_count[1h]))"
+          }
+        ],
+        "type": "table"
+      }
+    ]
+  }
+}
+```
+
+### Troubleshooting Proxy Cache
+
+#### Problème 1 : Images ne se cachent pas
+
+```bash
+# Vérifier que le projet est bien configuré en mode proxy
+curl -u "admin:Harbor12345" \
+  "https://harbor.dmz.internal/api/v2.0/projects/dockerhub-proxy" | jq
+
+# Doit contenir : "registry_id": <number>
+
+# Vérifier l'endpoint du registre
+curl -u "admin:Harbor12345" \
+  "https://harbor.dmz.internal/api/v2.0/registries" | jq
+
+# Tester la connectivité vers le registre externe
+curl -u "admin:Harbor12345" \
+  -X POST "https://harbor.dmz.internal/api/v2.0/registries/ping" \
+  -d '{"id": 1}'
+```
+
+#### Problème 2 : Erreur d'authentification
+
+```bash
+# Vérifier les credentials du registre externe
+curl -u "admin:Harbor12345" \
+  "https://harbor.dmz.internal/api/v2.0/registries/<registry-id>" | jq '.credential'
+
+# Re-tester les credentials
+docker login hub.docker.com -u <username> -p <token>
+```
+
+#### Problème 3 : Firewall bloque l'accès externe
+
+```bash
+# Tester la connectivité depuis Harbor vers l'externe
+kubectl exec -it <harbor-registry-pod> -n harbor -- sh
+
+# Depuis le pod Harbor
+wget -O- https://hub.docker.com/v2/
+wget -O- https://gcr.io/v2/
+
+# Si échec, configurer le proxy HTTP dans Harbor
+```
+
+Configuration proxy HTTP dans Harbor :
+```yaml
+# Dans harbor-values.yaml
+proxy:
+  httpProxy: "http://proxy.company.com:8080"
+  httpsProxy: "http://proxy.company.com:8080"
+  noProxy: "127.0.0.1,localhost,harbor.dmz.internal"
+```
+
 ## 🔍 Scan de Vulnérabilités
 
 ### Configuration Trivy dans Harbor
