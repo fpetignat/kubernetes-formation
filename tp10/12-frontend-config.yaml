@@ -163,7 +163,8 @@ data:
         </div>
 
         <script>
-            const API_URL = 'http://backend-api:5000';
+            // Utiliser une URL relative car Nginx proxie /api vers le backend
+            const API_URL = '/api';
 
             async function loadTasks(priority = null) {
                 const tasksList = document.getElementById('tasksList');
