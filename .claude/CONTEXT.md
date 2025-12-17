@@ -349,6 +349,27 @@ La section `.claude/SECURITY.md` "CAS SPÉCIAUX" documente déjà ce type de sit
 - [ ] Vérifier la persistance des données après redémarrage du pod
 - [ ] Scanner avec trivy pour confirmer 0 vulnérabilité HIGH/CRITICAL
 
+**Correction supplémentaire (même session)** :
+Le problème persistait après la première correction. Investigation complémentaire :
+
+**Problème identifié #2** :
+- Utilisation de `subPath: postgres` dans le volumeMount (ligne 79)
+- Le `subPath` empêche le `fsGroup` d'appliquer correctement les permissions
+- Problème connu de Kubernetes avec les subPath et fsGroup
+
+**Solution appliquée #2** :
+1. ✅ Retiré le `subPath: postgres` du volumeMount
+2. ✅ Ajouté variable d'environnement `PGDATA=/var/lib/postgresql/data/pgdata`
+   - PostgreSQL nécessite que PGDATA pointe vers un sous-répertoire
+   - Permet à PostgreSQL de vérifier que le répertoire est vide
+   - Le fsGroup: 70 s'applique maintenant correctement au volume entier
+
+**Explication technique** :
+- Sans subPath, le volume PVC est monté directement sur `/var/lib/postgresql/data`
+- Le `fsGroup: 70` change le propriétaire de tout le volume
+- PGDATA pointe vers `/var/lib/postgresql/data/pgdata` (sous-répertoire)
+- PostgreSQL peut créer ce sous-répertoire avec les bonnes permissions
+
 ## Décisions importantes
 
 ### Architecture d'automatisation (2025-12-12)

@@ -73,10 +73,14 @@ spec:
         envFrom:
         - secretRef:
             name: postgres-secret
+        env:
+        # PGDATA doit pointer vers un sous-répertoire pour permettre l'initialisation
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
         volumeMounts:
         - name: postgres-storage
           mountPath: /var/lib/postgresql/data
-          subPath: postgres
+          # Note: subPath removed to allow fsGroup to work correctly
         - name: init-script
           mountPath: /docker-entrypoint-initdb.d
         - name: tmp

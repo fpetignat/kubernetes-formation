@@ -408,9 +408,17 @@ spec:
         drop:
         - ALL
 
+    env:
+    # IMPORTANT: PGDATA doit pointer vers un sous-répertoire
+    # Cela permet à PostgreSQL de vérifier que le volume est vide
+    - name: PGDATA
+      value: /var/lib/postgresql/data/pgdata
+
     volumeMounts:
     - name: postgres-data
       mountPath: /var/lib/postgresql/data
+      # IMPORTANT: Ne PAS utiliser subPath avec PostgreSQL
+      # subPath empêche fsGroup de fonctionner correctement
     - name: run
       mountPath: /var/run/postgresql
     - name: tmp
@@ -475,6 +483,34 @@ volumes:
 ```
 
 ## 🚨 ERREURS COURANTES À ÉVITER
+
+### ❌ 0. Utiliser subPath avec des bases de données
+
+```yaml
+# ❌ MAUVAIS : subPath empêche fsGroup de fonctionner
+volumeMounts:
+- name: postgres-data
+  mountPath: /var/lib/postgresql/data
+  subPath: postgres  # ❌ NE PAS FAIRE
+
+# Résultat : "Operation not permitted" lors de chmod/initdb
+```
+
+```yaml
+# ✅ BON : Monter le volume directement + PGDATA vers sous-répertoire
+env:
+- name: PGDATA
+  value: /var/lib/postgresql/data/pgdata
+volumeMounts:
+- name: postgres-data
+  mountPath: /var/lib/postgresql/data
+  # Pas de subPath - fsGroup fonctionne correctement
+```
+
+**Explication** :
+- `subPath` dans Kubernetes empêche `fsGroup` d'appliquer les permissions
+- Problème connu depuis Kubernetes 1.9, toujours d'actualité
+- Solution : Monter le volume directement et utiliser PGDATA pour le sous-répertoire
 
 ### ❌ 1. Oublier le securityContext
 
