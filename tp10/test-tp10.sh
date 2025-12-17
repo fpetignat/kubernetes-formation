@@ -3,7 +3,8 @@
 # Script de test pour le TP10 - Projet de Synthèse TaskFlow
 # Teste le déploiement complet, l'autoscaling et le monitoring
 
-set -e
+# Note: set -e est intentionnellement désactivé car le script a sa propre logique
+# de gestion des erreurs avec les compteurs FAILED_TESTS et PASSED_TESTS
 
 # Couleurs pour l'affichage
 RED='\033[0;31m'
