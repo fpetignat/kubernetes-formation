@@ -17,10 +17,33 @@ data:
             names:
             - taskflow
         relabel_configs:
-        - source_labels: [__meta_kubernetes_pod_label_app]
+        # Ne garder que les pods avec l'annotation prometheus.io/scrape=true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
           action: keep
-          regex: backend-api|postgres|redis
+          regex: true
+        # Utiliser le port spécifié dans l'annotation prometheus.io/port
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          target_label: __address__
+          regex: (.+)
+          replacement: ${1}
+        # Utiliser le chemin spécifié dans l'annotation prometheus.io/path (défaut: /metrics)
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        # Ajouter le nom du pod comme label
         - source_labels: [__meta_kubernetes_pod_name]
           target_label: pod
+        # Ajouter le label app du pod
         - source_labels: [__meta_kubernetes_pod_label_app]
           target_label: app
+        # Ajouter le namespace comme label
+        - source_labels: [__meta_kubernetes_namespace]
+          target_label: namespace
+        # Corriger l'adresse avec l'IP du pod et le port annoté
+        - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
