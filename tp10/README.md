@@ -156,50 +156,60 @@ kubectl top nodes
 # Minimum recommandé : 4 Go de RAM libre
 ```
 
-### 1.4 (Optionnel) Construire l'image Docker Backend
+### 1.4 Construire l'image Docker Backend (REQUIS)
 
-**Par défaut**, le deployment backend utilise `python:3.11-slim` et installe les dépendances à la volée.
+**IMPORTANT** : Le deployment backend utilise maintenant une image Docker construite localement avec toutes les dépendances pré-installées.
 
-**Pour de meilleures performances**, vous pouvez construire une image Docker optimisée :
+**Avant de déployer l'application**, vous devez construire l'image :
 
 ```bash
 cd tp10
 
-# Construire l'image
-./build-image.sh latest
-
-# Charger l'image dans Minikube
-minikube image load taskflow-backend-api:latest
-
-# Vérifier que l'image est chargée
-minikube image ls | grep taskflow
+# Construire l'image backend avec le script automatisé
+./build-images.sh
 ```
 
-**Ensuite**, modifier `09-backend-deployment.yaml` :
-```yaml
-containers:
-- name: api
-  image: taskflow-backend-api:latest  # Image construite localement
-  imagePullPolicy: Never              # Ne pas chercher sur Docker Hub
+Le script `build-images.sh` effectue les opérations suivantes :
+1. ✅ Vérifie que Minikube est démarré
+2. ✅ Configure l'environnement Docker de Minikube (`eval $(minikube docker-env)`)
+3. ✅ Construit l'image `taskflow-backend:latest` avec le Dockerfile
+4. ✅ Rend l'image disponible directement dans Minikube
+
+**Vérifier que l'image est construite** :
+```bash
+# Configurer le shell pour utiliser Docker de Minikube
+eval $(minikube docker-env)
+
+# Lister les images disponibles
+docker images | grep taskflow-backend
 ```
 
-**Avantages de l'image pré-construite** :
-- ✅ Démarrage plus rapide des pods (dépendances déjà installées)
-- ✅ Image plus légère (~200 MB vs ~500 MB avec installation à la volée)
-- ✅ Moins de CPU/RAM utilisés au démarrage
-- ✅ Conforme aux bonnes pratiques de production
+**Avantages de cette approche** :
+- ✅ **Démarrage instantané** des pods (dépendances déjà installées)
+- ✅ **Pas d'installation à la volée** : pas de `pip install` au démarrage
+- ✅ **Image optimisée** : ~250 MB avec toutes les dépendances
+- ✅ **Sécurité renforcée** : utilisateur non-root (UID 1000) pré-configuré
+- ✅ **Conforme aux bonnes pratiques de production**
 
 **Structure des fichiers** :
 ```
 tp10/
-├── Dockerfile              # Définition de l'image
-├── requirements.txt        # Dépendances Python
-├── app.py                  # Code de l'application Flask
-├── build-image.sh          # Script de build
-└── .dockerignore          # Fichiers à exclure
+├── docker/
+│   └── backend/
+│       ├── Dockerfile           # Définition de l'image
+│       └── requirements.txt     # Dépendances Python
+├── build-images.sh              # Script de build automatisé
+└── 09-backend-deployment.yaml   # Utilise taskflow-backend:latest
 ```
 
-**Note** : Si vous ne construisez pas l'image, le deployment utilisera `python:3.11-slim` par défaut.
+**Configuration du Deployment** :
+Le fichier `09-backend-deployment.yaml` est configuré pour utiliser l'image locale :
+```yaml
+containers:
+- name: api
+  image: taskflow-backend:latest  # Image construite localement
+  imagePullPolicy: Never           # Ne pas chercher sur Docker Hub
+```
 
 ## 📦 Partie 2 : Déploiement de la base de données PostgreSQL avec initContainer
 
