@@ -70,6 +70,10 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 
   Architecture et gestion de clusters multi-noeuds, haute disponibilité, maintenance et stratégies de planification
 
+- **[TP10 - Projet de Synthèse : Application TaskFlow avec Auto-scaling et Monitoring](tp10/README.md)**
+
+  Projet de synthèse intégrant tous les concepts : HPA, initContainers, Monitoring (Prometheus/Grafana), Load Testing
+
 ### Préparation Certification CKAD
 
 - **[🎓 CKAD Preparation - Exercices et Examens Blancs](ckad-preparation/README.md)**
@@ -260,6 +264,25 @@ Maîtrisez la gestion de clusters Kubernetes multi-noeuds pour la production. Ce
 **Durée estimée :** 8-10 heures
 **Niveau :** Avancé
 
+### TP10 - Projet de Synthèse : Application TaskFlow avec Auto-scaling et Monitoring
+
+📁 **[Accéder au TP10](tp10/README.md)**
+
+Projet de synthèse qui intègre tous les concepts avancés des TPs précédents dans une application complète. Ce TP couvre :
+- Déploiement d'une stack applicative multi-tiers (Frontend, Backend API, PostgreSQL, Redis)
+- **HorizontalPodAutoscaler (HPA)** : Auto-scaling basé sur CPU/mémoire (2-10 replicas)
+- **initContainers** : Initialisation de base de données avec 1000 tâches de test
+- **Services** : ClusterIP pour composants internes, LoadBalancer pour exposition
+- **Volumes (PVC)** : Persistance des données pour PostgreSQL et Prometheus
+- **ConfigMaps et Secrets** : Configuration externalisée et gestion sécurisée des credentials
+- **Monitoring** : Prometheus pour collecte de métriques et Grafana pour visualisation
+- **Load Testing** : Générateur de charge pour observer l'autoscaling en action
+- **RBAC** : ServiceAccounts pour Prometheus
+- Architecture complète : Frontend (Nginx) → Backend API (Flask) → PostgreSQL + Redis + Prometheus + Grafana
+
+**Durée estimée :** 3-4 heures
+**Niveau :** Synthèse (tous les TPs précédents)
+
 ---
 
 ## Installation rapide
@@ -310,6 +333,18 @@ kubernetes-formation/
 │   ├── README.md             # Guide complet du TP9
 │   ├── examples/             # Exemples de manifests (affinités, taints, PDB)
 │   └── exercices/            # Exercices pratiques
+├── tp10/                      # TP10 - Projet de Synthèse TaskFlow
+│   ├── README.md             # Guide complet du TP10
+│   ├── QUICKSTART.md         # Guide de démarrage rapide
+│   ├── deploy.sh             # Script de déploiement automatique
+│   ├── test-tp10.sh          # Script de test automatisé
+│   ├── 01-postgres-*.yaml    # Manifests PostgreSQL (init, secret, PVC, deployment, service)
+│   ├── 06-redis-*.yaml       # Manifests Redis
+│   ├── 08-backend-*.yaml     # Manifests Backend API (config, code, deployment, service, HPA)
+│   ├── 12-frontend-*.yaml    # Manifests Frontend (config, deployment, service)
+│   ├── 15-prometheus-*.yaml  # Manifests Prometheus (config, RBAC, PVC, deployment, service)
+│   ├── 20-grafana-*.yaml     # Manifests Grafana (deployment, service)
+│   └── 22-load-generator.yaml # Job de génération de charge
 ├── ckad-preparation/          # 🎓 Préparation Certification CKAD
 │   ├── README.md             # Guide principal CKAD
 │   ├── cheatsheet.md         # Commandes essentielles
@@ -465,6 +500,7 @@ kubectl get events
 7. **TP7** : Migration Docker Compose vers Kubernetes ✅
 8. **TP8** : Réseau Kubernetes : Services, DNS et Connectivité ✅
 9. **TP9** : Gestion Multi-Noeud de Kubernetes ✅
+10. **TP10** : Projet de Synthèse - Application TaskFlow avec Auto-scaling et Monitoring ✅
 
 ## Workflow avec Claude
 
